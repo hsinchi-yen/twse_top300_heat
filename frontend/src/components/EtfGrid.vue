@@ -89,21 +89,13 @@ const gridStyle = computed(() => ({
 }))
 
 const sortedEtfs = computed(() => {
-  const arr = [...etfs.value]
-  if (etfSortBy.value === 'asset_scale') {
-    return arr.sort((a, b) => {
-      if (a.asset_scale == null && b.asset_scale == null) return (b.volume ?? 0) - (a.volume ?? 0)
-      if (a.asset_scale == null) return 1
-      if (b.asset_scale == null) return -1
-      return b.asset_scale - a.asset_scale
-    })
-  }
-  // turnover mode: sort by turnover_rate, fallback to volume when null
-  return arr.sort((a, b) => {
-    if (a.turnover_rate == null && b.turnover_rate == null) return (b.volume ?? 0) - (a.volume ?? 0)
-    if (a.turnover_rate == null) return 1
-    if (b.turnover_rate == null) return -1
-    return b.turnover_rate - a.turnover_rate
+  const rankKey = etfSortBy.value === 'asset_scale' ? 'asset_scale_rank' : 'turnover_rank'
+  return [...etfs.value].sort((a, b) => {
+    const ra = a[rankKey] ?? 9999
+    const rb = b[rankKey] ?? 9999
+    if (ra !== rb) return ra - rb
+    // 同 rank 時以成交量降序打平
+    return (b.volume ?? 0) - (a.volume ?? 0)
   })
 })
 
