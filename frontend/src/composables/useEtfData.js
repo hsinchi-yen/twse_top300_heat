@@ -14,7 +14,7 @@ import { useStockStore } from '../stores/stockStore'
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 const POLL_INTERVAL_MS = 60_000
 const MAX_BACKOFF_MS = 300_000
-const MOCK_MODE = false  // Phase C: real /api/etf endpoint
+const MOCK_MODE = false
 
 // ── 100-ETF mock dataset (representative Taiwan ETFs) ──
 const MOCK_ETFS = (() => {
