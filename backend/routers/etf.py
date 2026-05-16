@@ -49,7 +49,7 @@ def _latest_etf_date(db: Session) -> str:
 def get_etf(
     request: Request,
     sort_by: str = Query(default="turnover", pattern="^(turnover|asset_scale)$"),
-    limit: int = Query(default=100, ge=1, le=200),
+    limit: int = Query(default=300, ge=1, le=300),
     db: Session = Depends(get_db),
 ):
     query_date = _latest_etf_date(db)
@@ -96,6 +96,7 @@ def get_etf(
             "price_change_pct":  r.price_change_pct,
             "nav":               r.nav,
             "premium_discount":  r.premium_discount,
+            "portfolio_turnover": r.portfolio_turnover,
             "color_tier":        r.color_tier,
             "turnover_rank":     r.turnover_rank,
             "asset_scale_rank":  r.asset_scale_rank,

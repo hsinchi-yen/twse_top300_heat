@@ -6,11 +6,26 @@ from collections import defaultdict, deque
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from sqlalchemy import text as _text
 from database import engine, Base
 from routers import stocks, sectors, etf
 import models.etf  # ensure ETFRank table is registered with Base
 
 Base.metadata.create_all(bind=engine)
+
+# Safe schema migration: add columns introduced after initial deployment
+def _migrate_db() -> None:
+    with engine.connect() as conn:
+        for col_ddl in [
+            "ALTER TABLE etf_ranks ADD COLUMN portfolio_turnover REAL",
+        ]:
+            try:
+                conn.execute(_text(col_ddl))
+                conn.commit()
+            except Exception:
+                pass  # column already exists
+
+_migrate_db()
 
 app = FastAPI(title="TWSE Top 100 Heatmap API", version="1.0.0")
 

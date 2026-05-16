@@ -12,16 +12,12 @@
         <span class="tooltip-val">{{ formatScale(etf.asset_scale) }}</span>
       </div>
       <div class="tooltip-row">
-        <span class="tooltip-label">溢折價</span>
-        <span class="tooltip-val" :class="premiumClass">{{ formatPremium(etf.premium_discount) }}</span>
-      </div>
-      <div class="tooltip-row">
         <span class="tooltip-label">管理費</span>
         <span class="tooltip-val">{{ etf.management_fee != null ? `${etf.management_fee}%/年` : '—' }}</span>
       </div>
       <div class="tooltip-row">
         <span class="tooltip-label">持股週轉率</span>
-        <span class="tooltip-val tooltip-val--portfolio">{{ formatPortfolioTurnover(etf.portfolio_turnover) }}</span>
+        <span class="tooltip-val tooltip-val--portfolio">{{ formatPortfolioTurnover(portfolioTurnoverAnnual) }}</span>
       </div>
       <div class="tooltip-row">
         <span class="tooltip-label">漲跌幅</span>
@@ -47,7 +43,7 @@
 
     <!-- 底部：持股週轉率(左) + 成交量週轉率(右) -->
     <div class="cell-bottom">
-      <div class="cell-portfolio mono">{{ formatPortfolioTurnover(portfolioTurnover) }}</div>
+      <div class="cell-portfolio mono">{{ formatPortfolioTurnoverDaily(portfolioTurnoverAnnual) }}</div>
       <div class="cell-turnover mono" :class="{ 'cell-turnover--vol': etf.turnover_rate == null }">
         {{ turnoverDisplay }}
       </div>
@@ -69,15 +65,19 @@ const cellStyle = computed(() => ({
   boxShadow: `inset 0 0 24px ${etfTierToGlow(props.etf.color_tier)}, 0 0 1px rgba(255,179,0,0.08)`,
 }))
 
-// 持股週轉率：後端無此欄位時依類型估算（年化%）
-const portfolioTurnover = computed(() => {
+// 持股週轉率年化值：優先用後端值，否則依類型估算
+const portfolioTurnoverAnnual = computed(() => {
   if (props.etf.portfolio_turnover != null) return props.etf.portfolio_turnover
   const id   = props.etf.etf_id ?? ''
   const type = props.etf.etf_type ?? ''
   const seed = id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)
-  if (type === '槓桿/反向') return 500 + (seed % 300)
-  if (type === '商品型')   return 150 + (seed % 80)
-  if (type === '債券型')   return 25  + (seed % 40)
+  if (type === '槓桿')   return 500 + (seed % 300)
+  if (type === '反向')   return 400 + (seed % 200)
+  if (type === '期貨')   return 120 + (seed % 500)
+  if (type === '債券')   return 20  + (seed % 40)
+  if (type === '貨幣')   return 80  + (seed % 80)
+  if (type === '多資產') return 40  + (seed % 60)
+  if (type === '國外股') return 25  + (seed % 50)
   if (id === '0050' || id === '006208') return 5 + (seed % 8)
   return 30 + (seed % 55)
 })
@@ -105,14 +105,6 @@ const pctClass = computed(() => {
   return 'pct-flat'
 })
 
-const premiumClass = computed(() => {
-  const v = props.etf.premium_discount
-  if (v == null) return ''
-  if (v > 0) return 'premium-pos'
-  if (v < 0) return 'premium-neg'
-  return ''
-})
-
 function formatScale(v) {
   if (v == null) return '—'
   if (v >= 10000) return `${(v / 10000).toFixed(1)}兆`
@@ -134,13 +126,17 @@ function formatPrice(p) {
   return p >= 100 ? p.toFixed(1) : p.toFixed(2)
 }
 
-function formatPremium(v) {
+// Card bottom — daily rate (annual ÷ 252), adaptive precision
+function formatPortfolioTurnoverDaily(v) {
   if (v == null) return '—'
-  return `${v > 0 ? '+' : ''}${v.toFixed(3)}%`
+  const daily = v / 252
+  const digits = daily >= 1 ? 2 : daily >= 0.1 ? 3 : 4
+  return `${daily.toFixed(digits)}%/日`
 }
 
+// Tooltip — annual rate for context
 function formatPortfolioTurnover(v) {
-  return v != null ? `${v}%/年` : '—'
+  return v != null ? `${v.toFixed(0)}%/年` : '—'
 }
 </script>
 
@@ -243,8 +239,6 @@ function formatPortfolioTurnover(v) {
   letter-spacing: 0.02em;
 }
 
-.premium-pos { color: #ff8a65; }
-.premium-neg { color: #66bb6a; }
 .tooltip-val--portfolio { color: rgba(255, 220, 130, 0.75); }
 
 /* ── Top row ── */
@@ -281,11 +275,21 @@ function formatPortfolioTurnover(v) {
   max-width: 38%;
 }
 
-/* per-type tint */
-.cell-type-badge[data-type="債券型"]  { color: rgba(100, 180, 255, 0.7); border-color: rgba(100, 180, 255, 0.22); background: rgba(100, 180, 255, 0.07); }
-.cell-type-badge[data-type="商品型"]  { color: rgba(255, 140, 60, 0.75); border-color: rgba(255, 140, 60, 0.22); background: rgba(255, 140, 60, 0.07); }
-.cell-type-badge[data-type="槓桿/反向"]{ color: rgba(230, 80, 255, 0.75); border-color: rgba(230, 80, 255, 0.22); background: rgba(230, 80, 255, 0.07); }
-.cell-type-badge[data-type="貨幣市場"]{ color: rgba(80, 230, 180, 0.75); border-color: rgba(80, 230, 180, 0.22); background: rgba(80, 230, 180, 0.07); }
+/* ── 8-type badge colors ── */
+.cell-type-badge[data-type="國內股"]  { color: rgba(255,210,80,0.80); border-color: rgba(255,210,80,0.25); background: rgba(255,210,80,0.07); }
+.cell-type-badge[data-type="國外股"]  { color: rgba(80,200,255,0.80); border-color: rgba(80,200,255,0.25); background: rgba(80,200,255,0.07); }
+.cell-type-badge[data-type="多資產"]  { color: rgba(180,100,255,0.80); border-color: rgba(180,100,255,0.25); background: rgba(180,100,255,0.07); }
+.cell-type-badge[data-type="槓桿"]   { color: rgba(255,100,60,0.90); border-color: rgba(255,100,60,0.28); background: rgba(255,100,60,0.09); }
+.cell-type-badge[data-type="反向"]   { color: rgba(255,60,180,0.90); border-color: rgba(255,60,180,0.28); background: rgba(255,60,180,0.09); }
+.cell-type-badge[data-type="期貨"]   { color: rgba(255,150,50,0.80); border-color: rgba(255,150,50,0.25); background: rgba(255,150,50,0.07); }
+.cell-type-badge[data-type="債券"]   { color: rgba(100,180,255,0.75); border-color: rgba(100,180,255,0.22); background: rgba(100,180,255,0.07); }
+.cell-type-badge[data-type="貨幣"]   { color: rgba(80,230,180,0.80); border-color: rgba(80,230,180,0.25); background: rgba(80,230,180,0.07); }
+/* Legacy badge types (kept for existing DB rows during migration) */
+.cell-type-badge[data-type="股票型"]  { color: rgba(255,210,80,0.75); border-color: rgba(255,210,80,0.22); background: rgba(255,210,80,0.07); }
+.cell-type-badge[data-type="債券型"]  { color: rgba(100,180,255,0.7); border-color: rgba(100,180,255,0.22); background: rgba(100,180,255,0.07); }
+.cell-type-badge[data-type="商品型"]  { color: rgba(255,140,60,0.75); border-color: rgba(255,140,60,0.22); background: rgba(255,140,60,0.07); }
+.cell-type-badge[data-type="槓桿/反向"]{ color: rgba(230,80,255,0.75); border-color: rgba(230,80,255,0.22); background: rgba(230,80,255,0.07); }
+.cell-type-badge[data-type="貨幣市場"]{ color: rgba(80,230,180,0.75); border-color: rgba(80,230,180,0.22); background: rgba(80,230,180,0.07); }
 
 .cell-scale {
   font-size: 0.52rem;
@@ -344,7 +348,7 @@ function formatPortfolioTurnover(v) {
   gap: 2px;
 }
 
-/* 持股週轉率（左下）— 年化，偏暗 */
+/* 持股週轉率（左下）— 日化，偏暗 */
 .cell-portfolio {
   font-size: 0.58rem;
   color: rgba(255, 190, 70, 0.45);
@@ -360,14 +364,13 @@ function formatPortfolioTurnover(v) {
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
-/* 無週轉率資料時顯示成交量（偏暗提示為代理值） */
 .cell-turnover--vol {
   font-size: 0.58rem;
   font-weight: 400;
   color: rgba(255, 190, 70, 0.4);
 }
 
-/* hover tooltip 漲跌幅顏色（仍保留在 tooltip 裡） */
+/* hover tooltip 漲跌幅顏色 */
 .pct-up   { color: #ff6b6b; }
 .pct-down { color: #00e676; }
 .pct-flat { color: rgba(255, 200, 80, 0.3); }

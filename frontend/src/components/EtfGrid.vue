@@ -22,6 +22,23 @@
         />
       </div>
 
+      <!-- 類型篩選列 -->
+      <div class="type-filter">
+        <button
+          class="type-chip"
+          :class="{ active: selectedTypes.size === 0 }"
+          @click="clearFilter"
+        >全部 ({{ sortedEtfs.length }})</button>
+        <button
+          v-for="t in availableTypes"
+          :key="t.name"
+          class="type-chip"
+          :class="{ active: selectedTypes.has(t.name) }"
+          :data-type="t.name"
+          @click="toggleType(t.name)"
+        >{{ t.name }} ({{ t.count }})</button>
+      </div>
+
       <!-- 換頁列 + 排序切換 -->
       <div class="pagination">
         <button class="page-btn" :disabled="page === 0" @click="prevPage">‹ 上一頁</button>
@@ -39,7 +56,7 @@
         <span class="page-info">
           第 {{ page + 1 }} / {{ totalPages }} 頁
           &nbsp;·&nbsp;
-          排名 {{ pageStart + 1 }}–{{ pageEnd }}（共 {{ etfs.length }} 檔 / {{ gridSize }}×{{ gridSize }}）
+          排名 {{ pageStart + 1 }}–{{ pageEnd }}（共 {{ filteredEtfs.length }} 檔 / {{ gridSize }}×{{ gridSize }}）
         </span>
 
         <!-- 排序切換 + 週轉率說明 -->
@@ -80,6 +97,7 @@ const store = useStockStore()
 const { etfs, etfLoading, etfError, etfSortBy, gridSize } = storeToRefs(store)
 
 const page = ref(0)
+const selectedTypes = ref(new Set())
 
 const pageSize = computed(() => gridSize.value * gridSize.value)
 
@@ -94,15 +112,31 @@ const sortedEtfs = computed(() => {
     const ra = a[rankKey] ?? 9999
     const rb = b[rankKey] ?? 9999
     if (ra !== rb) return ra - rb
-    // 同 rank 時以成交量降序打平
     return (b.volume ?? 0) - (a.volume ?? 0)
   })
 })
 
-const totalPages = computed(() => Math.max(1, Math.ceil(sortedEtfs.value.length / pageSize.value)))
+// Unique types sorted by frequency for filter chips
+const availableTypes = computed(() => {
+  const counts = {}
+  for (const e of sortedEtfs.value) {
+    const t = e.etf_type ?? '—'
+    counts[t] = (counts[t] ?? 0) + 1
+  }
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => ({ name, count }))
+})
+
+const filteredEtfs = computed(() => {
+  if (selectedTypes.value.size === 0) return sortedEtfs.value
+  return sortedEtfs.value.filter(e => selectedTypes.value.has(e.etf_type))
+})
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredEtfs.value.length / pageSize.value)))
 const pageStart  = computed(() => page.value * pageSize.value)
-const pageEnd    = computed(() => Math.min(pageStart.value + pageSize.value, sortedEtfs.value.length))
-const pageEtfs   = computed(() => sortedEtfs.value.slice(pageStart.value, pageEnd.value))
+const pageEnd    = computed(() => Math.min(pageStart.value + pageSize.value, filteredEtfs.value.length))
+const pageEtfs   = computed(() => filteredEtfs.value.slice(pageStart.value, pageEnd.value))
 const emptyCount = computed(() => pageSize.value - pageEtfs.value.length)
 
 watch(etfs,     () => { page.value = 0 })
@@ -115,6 +149,19 @@ function nextPage() { if (page.value < totalPages.value - 1) page.value++ }
 function setSortBy(val) {
   store.setEtfSortBy(val)
 }
+
+function toggleType(type) {
+  const s = new Set(selectedTypes.value)
+  if (s.has(type)) s.delete(type)
+  else s.add(type)
+  selectedTypes.value = s
+  page.value = 0
+}
+
+function clearFilter() {
+  selectedTypes.value = new Set()
+  page.value = 0
+}
 </script>
 
 <style scoped>
@@ -122,14 +169,13 @@ function setSortBy(val) {
   display: flex;
   flex-direction: column;
   height: 100%;
-  gap: 0.35rem;
+  gap: 0.3rem;
   min-height: 0;
 }
 
 .etf-grid {
   flex: 1;
   display: grid;
-  /* columns/rows set via :style binding */
   gap: clamp(4px, 0.55vw, 8px);
   min-height: 0;
 }
@@ -143,6 +189,52 @@ function setSortBy(val) {
   border-radius: 6px;
 }
 
+/* ── 類型篩選列 ── */
+.type-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 0.1rem 0;
+}
+
+.type-chip {
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 179, 0, 0.18);
+  background: rgba(255, 179, 0, 0.04);
+  color: rgba(255, 179, 0, 0.38);
+  font-size: 0.62rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: all 0.13s;
+  white-space: nowrap;
+}
+.type-chip:hover {
+  color: rgba(255, 179, 0, 0.75);
+  border-color: rgba(255, 179, 0, 0.35);
+  background: rgba(255, 179, 0, 0.09);
+}
+.type-chip.active {
+  color: #ffb300;
+  border-color: #ffb300;
+  background: rgba(255, 179, 0, 0.14);
+  box-shadow: 0 0 6px rgba(255, 179, 0, 0.22);
+}
+
+/* Type-specific active tint for filter chips */
+.type-chip.active[data-type="國外股"] { color: #50c8ff; border-color: #50c8ff; background: rgba(80,200,255,0.12); box-shadow: 0 0 6px rgba(80,200,255,0.2); }
+.type-chip.active[data-type="多資產"] { color: #b464ff; border-color: #b464ff; background: rgba(180,100,255,0.12); box-shadow: 0 0 6px rgba(180,100,255,0.2); }
+.type-chip.active[data-type="槓桿"]  { color: #ff643c; border-color: #ff643c; background: rgba(255,100,60,0.12);  box-shadow: 0 0 6px rgba(255,100,60,0.2); }
+.type-chip.active[data-type="反向"]  { color: #ff3cb4; border-color: #ff3cb4; background: rgba(255,60,180,0.12);  box-shadow: 0 0 6px rgba(255,60,180,0.2); }
+.type-chip.active[data-type="期貨"]  { color: #ff9632; border-color: #ff9632; background: rgba(255,150,50,0.12);  box-shadow: 0 0 6px rgba(255,150,50,0.2); }
+.type-chip.active[data-type="債券"]  { color: #64b4ff; border-color: #64b4ff; background: rgba(100,180,255,0.12); box-shadow: 0 0 6px rgba(100,180,255,0.2); }
+.type-chip.active[data-type="貨幣"]  { color: #50e6b4; border-color: #50e6b4; background: rgba(80,230,180,0.12);  box-shadow: 0 0 6px rgba(80,230,180,0.2); }
+
+/* ── 換頁列 ── */
 .pagination {
   display: flex;
   align-items: center;
@@ -150,10 +242,9 @@ function setSortBy(val) {
   gap: 0.65rem;
   flex-wrap: wrap;
   flex-shrink: 0;
-  padding: 0.2rem 0;
+  padding: 0.1rem 0;
 }
 
-/* amber page button */
 .page-btn {
   background: rgba(255, 179, 0, 0.05);
   color: #ffb300;
@@ -173,7 +264,7 @@ function setSortBy(val) {
 }
 .page-btn:disabled { opacity: 0.25; cursor: default; }
 
-.page-dots { display: flex; gap: 4px; }
+.page-dots { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
 
 .dot {
   width: 26px;
@@ -256,9 +347,7 @@ function setSortBy(val) {
   user-select: none;
   transition: color 0.15s;
 }
-.turnover-info:hover .info-trigger {
-  color: #ffb300;
-}
+.turnover-info:hover .info-trigger { color: #ffb300; }
 
 .info-popover {
   display: none;
@@ -319,5 +408,6 @@ function setSortBy(val) {
   .info-trigger { font-size: 0.60rem; }
   .info-popover { width: 240px; font-size: 0.62rem; }
   .state-msg { font-size: 0.88rem; padding: 2rem; }
+  .type-chip { font-size: 0.56rem; padding: 1px 5px; }
 }
 </style>

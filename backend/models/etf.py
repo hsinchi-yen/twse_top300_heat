@@ -20,6 +20,7 @@ class ETFRank(Base):
     price_change_pct  = Column(Float, default=None)
     nav               = Column(Float, default=None)             # 淨值 per unit
     premium_discount  = Column(Float, default=None)             # (price-nav)/nav*100
+    portfolio_turnover = Column(Float, default=None)            # annual % from prospectus / type estimate
     color_tier        = Column(String, default="neutral")
     turnover_rank     = Column(Integer, default=None)
     asset_scale_rank  = Column(Integer, default=None)

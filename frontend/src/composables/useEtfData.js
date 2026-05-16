@@ -221,7 +221,7 @@ export function useEtfData() {
         } else {
           abortController = new AbortController()
           const res = await fetch(
-            `${API_BASE}/api/etf?sort_by=${store.etfSortBy}&limit=100`,
+            `${API_BASE}/api/etf?sort_by=${store.etfSortBy}&limit=300`,
             { signal: abortController.signal }
           )
           if (!res.ok) throw new Error(`HTTP ${res.status}`)

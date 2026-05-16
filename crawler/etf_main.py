@@ -54,7 +54,7 @@ def _ensure_table() -> None:
                 etf_id            TEXT NOT NULL,
                 name              TEXT NOT NULL,
                 date              TEXT NOT NULL,
-                etf_type          TEXT DEFAULT '股票型',
+                etf_type          TEXT DEFAULT '國內股',
                 tracking_index    TEXT DEFAULT '',
                 management_fee    REAL,
                 asset_scale       REAL,
@@ -65,12 +65,18 @@ def _ensure_table() -> None:
                 price_change_pct  REAL,
                 nav               REAL,
                 premium_discount  REAL,
+                portfolio_turnover REAL,
                 color_tier        TEXT DEFAULT 'neutral',
                 turnover_rank     INTEGER,
                 asset_scale_rank  INTEGER,
                 UNIQUE(etf_id, date)
             )
         """))
+        # Add portfolio_turnover to existing tables that predate this column
+        try:
+            conn.execute(text("ALTER TABLE etf_ranks ADD COLUMN portfolio_turnover REAL"))
+        except Exception:
+            pass  # column already exists
         conn.commit()
 
 
@@ -82,12 +88,12 @@ def _upsert(session, records: list[dict], date: str) -> None:
                     (etf_id, name, date, etf_type, tracking_index, management_fee,
                      asset_scale, outstanding_units, volume, turnover_rate,
                      close_price, price_change_pct, nav, premium_discount,
-                     color_tier, turnover_rank, asset_scale_rank)
+                     portfolio_turnover, color_tier, turnover_rank, asset_scale_rank)
                 VALUES
                     (:etf_id, :name, :date, :etf_type, :tracking_index, :management_fee,
                      :asset_scale, :outstanding_units, :volume, :turnover_rate,
                      :close_price, :price_change_pct, :nav, :premium_discount,
-                     :color_tier, :turnover_rank, :asset_scale_rank)
+                     :portfolio_turnover, :color_tier, :turnover_rank, :asset_scale_rank)
                 ON CONFLICT(etf_id, date) DO UPDATE SET
                     etf_type=excluded.etf_type,
                     tracking_index=excluded.tracking_index,
@@ -100,6 +106,7 @@ def _upsert(session, records: list[dict], date: str) -> None:
                     price_change_pct=excluded.price_change_pct,
                     nav=excluded.nav,
                     premium_discount=excluded.premium_discount,
+                    portfolio_turnover=excluded.portfolio_turnover,
                     color_tier=excluded.color_tier,
                     turnover_rank=excluded.turnover_rank,
                     asset_scale_rank=excluded.asset_scale_rank
