@@ -7,6 +7,12 @@ services:
       - ./data:/app/data
     environment:
       - DATABASE_URL=sqlite:////app/data/twse_heat.db
+      - TOP100_CACHE_TTL_SECONDS=3
+      - SQLITE_BUSY_TIMEOUT_MS=5000
+      - SQLITE_CACHE_SIZE_KIB=8192
+      - UVICORN_WORKERS=1
+      - UVICORN_KEEPALIVE_SECONDS=5
+      - UVICORN_LOG_LEVEL=warning
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -31,7 +37,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "5173:80"
+      - "8504:80"
     depends_on:
       - backend
     networks:

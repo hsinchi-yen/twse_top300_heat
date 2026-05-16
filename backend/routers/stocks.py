@@ -1,7 +1,12 @@
 from datetime import datetime, time
+import hashlib
+import json
+import os
+import time as time_mod
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
@@ -13,6 +18,8 @@ router = APIRouter()
 TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 MARKET_OPEN = time(9, 0)
 MARKET_CLOSE = time(13, 30)   # 台股正式交易時間 09:00-13:30
+CACHE_TTL_SECONDS = float(os.getenv("TOP100_CACHE_TTL_SECONDS", "3"))
+_TOP100_CACHE: dict[tuple[str, int, str], tuple[float, dict, str]] = {}
 
 
 def _is_market_open() -> bool:
@@ -45,42 +52,70 @@ def _latest_data_date(db: Session) -> str:
 
 @router.get("/stocks/top100")
 def get_top100(
+    request: Request,
     mode: str = Query(default="volume", pattern="^(volume|turnover)$"),
-    limit: int = Query(default=300, ge=1, le=1000),
+    limit: int = Query(default=100, ge=1, le=1000),
     db: Session = Depends(get_db),
 ):
     query_date = _latest_data_date(db)
+    cache_key = (mode, limit, query_date)
+    now_ts = time_mod.monotonic()
+    cached = _TOP100_CACHE.get(cache_key)
+    if cached and now_ts - cached[0] <= CACHE_TTL_SECONDS:
+        _, cached_payload, cached_etag = cached
+        if request.headers.get("if-none-match") == cached_etag:
+            return Response(
+                status_code=304,
+                headers={
+                    "ETag": cached_etag,
+                    "Cache-Control": f"public, max-age={int(CACHE_TTL_SECONDS)}",
+                },
+            )
+        return JSONResponse(
+            content=cached_payload,
+            headers={
+                "ETag": cached_etag,
+                "Cache-Control": f"public, max-age={int(CACHE_TTL_SECONDS)}",
+            },
+        )
 
-    stocks = db.query(StockRank).filter(StockRank.date == query_date).all()
+    rank_col = StockRank.volume_rank if mode == "volume" else StockRank.turnover_rank
 
-    if mode == "volume":
-        stocks.sort(key=lambda s: s.volume_rank or 9999)
-    else:
-        stocks.sort(key=lambda s: s.turnover_rank or 9999)
-
-    top_stocks = stocks[:limit]
-
-    sector_lookup: dict[str, str] = {
-        row.stock_id: row.sector
-        for row in db.query(SectorMap).all()
-    }
+    ranked_rows = (
+        db.query(
+            StockRank.stock_id,
+            StockRank.name,
+            rank_col.label("rank"),
+            StockRank.volume,
+            StockRank.turnover_rate,
+            StockRank.price_change_pct,
+            StockRank.color_tier,
+            StockRank.close_price,
+            SectorMap.sector,
+        )
+        .outerjoin(SectorMap, SectorMap.stock_id == StockRank.stock_id)
+        .filter(StockRank.date == query_date)
+        .order_by(func.coalesce(rank_col, 9999).asc())
+        .limit(limit)
+        .all()
+    )
 
     # Dynamic grouping — accept any sector name from sector_map (industry or custom theme)
     sector_groups: dict[str, list] = {}
 
-    for stock in top_stocks:
-        sector = sector_lookup.get(stock.stock_id, "其他") or "其他"
+    for row in ranked_rows:
+        sector = row.sector or "其他"
         if sector not in sector_groups:
             sector_groups[sector] = []
         sector_groups[sector].append({
-            "stock_id": stock.stock_id,
-            "name": stock.name,
-            "rank": stock.volume_rank if mode == "volume" else stock.turnover_rank,
-            "volume": stock.volume,
-            "turnover_rate": stock.turnover_rate,
-            "price_change_pct": stock.price_change_pct,
-            "color_tier": stock.color_tier,
-            "close_price": stock.close_price,
+            "stock_id": row.stock_id,
+            "name": row.name,
+            "rank": row.rank,
+            "volume": row.volume,
+            "turnover_rate": row.turnover_rate,
+            "price_change_pct": row.price_change_pct,
+            "color_tier": row.color_tier,
+            "close_price": row.close_price,
         })
 
     sectors_out = [
@@ -89,10 +124,44 @@ def get_top100(
         if stocks_list
     ]
 
-    return {
+    etag_payload = {
         "mode": mode,
         "date": query_date,
         "market_open": _is_market_open(),
+        "sectors": sectors_out,
+    }
+    etag_hash = hashlib.sha1(
+        json.dumps(etag_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    etag_value = f'W/"{etag_hash}"'
+
+    if request.headers.get("if-none-match") == etag_value:
+        return Response(
+            status_code=304,
+            headers={
+                "ETag": etag_value,
+                "Cache-Control": f"public, max-age={int(CACHE_TTL_SECONDS)}",
+            },
+        )
+
+    payload = {
+        "mode": mode,
+        "date": query_date,
+        "market_open": etag_payload["market_open"],
         "updated_at": datetime.now(tz=TZ_TAIPEI).isoformat(),
         "sectors": sectors_out,
     }
+
+    _TOP100_CACHE[cache_key] = (now_ts, payload, etag_value)
+    if len(_TOP100_CACHE) > 16:
+        # Keep cache size bounded for long-lived embedded processes.
+        oldest_key = min(_TOP100_CACHE.items(), key=lambda item: item[1][0])[0]
+        _TOP100_CACHE.pop(oldest_key, None)
+
+    return JSONResponse(
+        content=payload,
+        headers={
+            "ETag": etag_value,
+            "Cache-Control": f"public, max-age={int(CACHE_TTL_SECONDS)}",
+        },
+    )

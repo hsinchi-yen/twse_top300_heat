@@ -2,9 +2,9 @@
 main.py — Crawler APScheduler entry point
 
 排程邏輯（台股交易時間 09:00-13:30）：
-  - 盤中：每 10 分鐘觸發（±90 秒 jitter），超過 13:30 自動 skip
-  - 收盤後：13:35 執行最終一次（is_closing=True），之後不再拉取
-  - 每日 08:55 重置 cache、補充 sector_map
+    - 盤中：每 60 秒觸發（低 jitter），超過 13:30 自動 skip
+    - 收盤後：16:00 執行最終一次（is_closing=True），之後不再拉取
+    - 每日 08:55 重置 cache、刷新 sector_map
 """
 
 import logging
@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:////app/data/twse_heat.db")
 TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 MARKET_CLOSE = time(13, 30)
+MIN_VALID_RECORDS = int(os.getenv("MIN_VALID_RECORDS", "80"))
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 Session = sessionmaker(bind=engine)
@@ -84,6 +85,20 @@ def _ensure_sectors(session, industry: dict[str, str]) -> None:
     logger.info("Sector map now has %d entries.", new_count)
 
 
+def refresh_sector_map_job() -> None:
+    """
+    將 FinMind 類股資訊刷新至 sector_map，與盤中價格抓取解耦。
+    """
+    logger.info("Refreshing sector_map from FinMind industry categories...")
+    industry = fetch_industry_categories()
+    if not industry:
+        logger.warning("Industry categories unavailable, skip sector_map refresh.")
+        return
+
+    with Session() as session:
+        _ensure_sectors(session, industry)
+
+
 def crawl_job(is_closing: bool = False) -> None:
     now = datetime.now(tz=TZ_TAIPEI)
     today = now.strftime("%Y-%m-%d")
@@ -97,13 +112,29 @@ def crawl_job(is_closing: bool = False) -> None:
 
     # 各來源間加入隨機延遲，降低被識別為 bot 的機率
     twse, trading_date = fetch_twse_daily()
-    _time.sleep(random.uniform(3.0, 6.0))    # inter-source delay
+    _time.sleep(random.uniform(1.0, 3.0))    # inter-source delay
     tpex = fetch_tpex_daily()
-    _time.sleep(random.uniform(2.0, 4.0))
+    _time.sleep(random.uniform(1.0, 3.0))
     issue_shares = fetch_issue_shares()
+
+    if not twse and not tpex:
+        logger.warning("Both TWSE and TPEX sources failed/empty. Keeping previous snapshot.")
+        return
+    if not twse:
+        logger.warning("TWSE source empty, continuing with TPEX snapshot.")
+    if not tpex:
+        logger.warning("TPEX source empty, continuing with TWSE snapshot.")
 
     records = merge_and_rank(twse, tpex, issue_shares)
     logger.info("Merged %d stocks", len(records))
+
+    if len(records) < MIN_VALID_RECORDS and not is_closing:
+        logger.warning(
+            "Merged records too small (%d < %d). Skip overwrite to avoid degraded snapshot.",
+            len(records),
+            MIN_VALID_RECORDS,
+        )
+        return
 
     total_volume = sum(r.get("volume", 0) or 0 for r in records)
     if total_volume == 0:
@@ -115,11 +146,7 @@ def crawl_job(is_closing: bool = False) -> None:
     if date_to_store != today:
         logger.info("Storing under API trading date %s (scheduler date: %s)", date_to_store, today)
 
-    # 取得類股資訊（第一次呼叫時自動從 FinMind 載入）
-    industry = fetch_industry_categories()
-
     with Session() as session:
-        _ensure_sectors(session, industry)
         _upsert(session, records, date_to_store)
 
     logger.info("Crawl job done. %d records upserted for %s.", len(records), date_to_store)
@@ -127,36 +154,50 @@ def crawl_job(is_closing: bool = False) -> None:
 
 def daily_reset_job() -> None:
     clear_cache()
+    refresh_sector_map_job()
     logger.info("Cache cleared for new trading day.")
 
 
 if __name__ == "__main__":
     scheduler = BlockingScheduler(timezone=TZ_TAIPEI)
 
-    # 盤中：每 10 分鐘一次（±90 秒 jitter），超過 13:30 由 crawl_job 內部 skip
+    # 盤中：09:00-12:59 每分鐘一次
     scheduler.add_job(
         crawl_job,
         trigger="cron",
         day_of_week="mon-fri",
-        hour="9-13",
-        minute="0,10,20,30,40,50",
+        hour="9-12",
+        minute="*",
         kwargs={"is_closing": False},
         id="crawl_intraday",
-        misfire_grace_time=180,
-        jitter=90,
+        misfire_grace_time=120,
+        jitter=8,
     )
 
-    # 收盤後最終一次：13:35
+    # 盤中延伸：13:00-13:30 每分鐘一次
     scheduler.add_job(
         crawl_job,
         trigger="cron",
         day_of_week="mon-fri",
         hour=13,
-        minute=35,
+        minute="0-30",
+        kwargs={"is_closing": False},
+        id="crawl_intraday_1330",
+        misfire_grace_time=120,
+        jitter=8,
+    )
+
+    # 收盤後最終一次：16:00
+    scheduler.add_job(
+        crawl_job,
+        trigger="cron",
+        day_of_week="mon-fri",
+        hour=16,
+        minute=0,
         kwargs={"is_closing": True},
         id="crawl_close",
         misfire_grace_time=180,
-        jitter=60,
+        jitter=20,
     )
 
     # 每日 08:55 重置 cache
@@ -169,5 +210,5 @@ if __name__ == "__main__":
         id="daily_reset",
     )
 
-    logger.info("Crawler scheduler started. Market hours: 09:00-13:30, poll every 10 min.")
+    logger.info("Crawler scheduler started. Market hours: 09:00-13:30, poll every 60s.")
     scheduler.start()

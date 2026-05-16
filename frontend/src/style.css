@@ -1,9 +1,22 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+:root {
+  --app-bg: #050810;
+  --text-main: #c8d8e8;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+}
+
 body {
-  background: #050810;
-  color: #c8d8e8;
+  background: var(--app-bg);
+  color: var(--text-main);
   font-family: 'Inter', 'Noto Sans TC', sans-serif;
+  overflow: hidden;
   /* subtle dot-grid texture */
   background-image: radial-gradient(rgba(0, 229, 255, 0.04) 1px, transparent 1px);
   background-size: 28px 28px;
@@ -21,4 +34,18 @@ body {
 .mono {
   font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
   font-variant-numeric: tabular-nums;
+}
+
+/* Embedded / kiosk: reduce repaint-heavy effects for long uptime stability. */
+@media (prefers-reduced-motion: reduce), (max-width: 1366px), (max-height: 768px) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  body {
+    background-image: none;
+  }
 }

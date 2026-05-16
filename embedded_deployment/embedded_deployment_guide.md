@@ -136,13 +136,13 @@ docker run -d \
 docker run -d \
   --name twse-frontend \
   --network "${NETWORK}" \
-  -p 5173:80 \
+  -p 8504:80 \
   --restart unless-stopped \
   twse-frontend:latest
 
 echo ""
 echo "=== 部署完成 ==="
-echo "前端：http://$(hostname -I | awk '{print $1}'):5173"
+echo "前端：http://$(hostname -I | awk '{print $1}'):8504"
 echo "API ：http://$(hostname -I | awk '{print $1}'):8000/api/stocks/top100?mode=turnover"
 ```
 
@@ -237,7 +237,7 @@ docker run -d \
 docker run -d \
   --name twse-frontend \
   --network twse-net \
-  -p 5173:80 \
+  -p 8504:80 \
   --restart unless-stopped \
   twse-frontend:latest
 ```
@@ -251,7 +251,7 @@ docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 預期輸出：
 ```
 NAMES            STATUS                    PORTS
-twse-frontend    Up 2 minutes              0.0.0.0:5173->80/tcp
+twse-frontend    Up 2 minutes              0.0.0.0:8504->80/tcp
 twse-crawler     Up 2 minutes
 twse-backend     Up 3 minutes (healthy)    0.0.0.0:8000->8000/tcp
 ```
@@ -318,7 +318,7 @@ docker run -d \
 docker run -d \
   --name twse-frontend \
   --network "${NETWORK}" \
-  -p 5173:80 \
+  -p 8504:80 \
   --restart unless-stopped \
   twse-frontend:latest
 EOF
@@ -515,7 +515,7 @@ docker run -d \
   --memory="32m" \
   --memory-swap="32m" \
   --network twse-net \
-  -p 5173:80 \
+  -p 8504:80 \
   --restart unless-stopped \
   twse-frontend:latest
 ```

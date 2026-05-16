@@ -1,5 +1,5 @@
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ embedded: isEmbedded }">
     <header class="topbar">
       <div class="topbar-left">
         <h1 class="app-title">
@@ -33,6 +33,8 @@ import { useStockData } from './composables/useStockData'
 import ModeToggle from './components/ModeToggle.vue'
 import HeatmapGrid from './components/HeatmapGrid.vue'
 
+const isEmbedded = import.meta.env.VITE_EMBEDDED === 'true'
+
 const store = useStockStore()
 const { mode, marketOpen, updatedAt, date: dataDate } = storeToRefs(store)
 
@@ -55,6 +57,7 @@ const formattedTime = computed(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   background: transparent;
   color: #c8d8e8;
   font-family: 'Inter', 'Noto Sans TC', sans-serif;
@@ -64,6 +67,7 @@ const formattedTime = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.75rem;
   padding: 0.65rem 1.5rem;
   background: rgba(5, 8, 16, 0.94);
   border-bottom: 1px solid rgba(0, 229, 255, 0.18);
@@ -76,6 +80,7 @@ const formattedTime = computed(() => {
   display: flex;
   align-items: center;
   gap: 1.5rem;
+  min-width: 0;
 }
 
 .app-title {
@@ -102,6 +107,7 @@ const formattedTime = computed(() => {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .badge {
@@ -152,5 +158,65 @@ const formattedTime = computed(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.app-shell.embedded .topbar {
+  backdrop-filter: none;
+  box-shadow: none;
+  padding: 0.55rem 0.9rem;
+}
+
+.app-shell.embedded .title-text {
+  font-size: 0.96rem;
+  filter: none;
+}
+
+.app-shell.embedded .topbar-left {
+  gap: 0.9rem;
+}
+
+.app-shell.embedded .topbar-right {
+  gap: 0.45rem;
+}
+
+.app-shell.embedded .badge {
+  font-size: 0.64rem;
+  padding: 0.14rem 0.42rem;
+}
+
+.app-shell.embedded .main-content {
+  padding: 0.65rem 0.75rem;
+}
+
+@media (max-width: 1366px), (max-height: 768px) {
+  .topbar {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .topbar-left {
+    gap: 0.75rem;
+  }
+
+  .title-text {
+    font-size: 0.94rem;
+    letter-spacing: 0.05em;
+  }
+
+  .topbar-right {
+    gap: 0.4rem;
+  }
+
+  .badge {
+    font-size: 0.62rem;
+    padding: 0.12rem 0.4rem;
+  }
+
+  .last-updated {
+    font-size: 0.62rem;
+  }
+
+  .main-content {
+    padding: 0.55rem 0.65rem;
+  }
 }
 </style>

@@ -5,14 +5,14 @@
       :class="['toggle-btn', mode === 'volume' ? 'active' : '']"
       @click="emit('mode-change', 'volume')"
     >
-      成交量 TOP 300
+      成交量 TOP 100
     </button>
     <button
       id="btn-turnover"
       :class="['toggle-btn', mode === 'turnover' ? 'active' : '']"
       @click="emit('mode-change', 'turnover')"
     >
-      週轉率 TOP 300
+      週轉率 TOP 100
     </button>
   </div>
 </template>

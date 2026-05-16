@@ -47,7 +47,7 @@ docker compose down               # 停止
 
 # 前端獨立開發
 cd frontend && npm install
-npm run dev                       # http://localhost:5173
+npm run dev                       # http://localhost:8504
 
 # 後端獨立開發
 cd backend && pip install -r requirements.txt

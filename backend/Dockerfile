@@ -11,4 +11,4 @@ COPY . .
 
 RUN mkdir -p /app/data
 
-CMD ["sh", "-c", "python seed.py && uvicorn main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "python seed.py && uvicorn main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-1} --timeout-keep-alive ${UVICORN_KEEPALIVE_SECONDS:-5} --log-level ${UVICORN_LOG_LEVEL:-warning}"]

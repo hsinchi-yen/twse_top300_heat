@@ -20,7 +20,7 @@
 - [ ] `docker compose up -d` 無報錯啟動
 - [ ] `docker compose ps` 三個服務狀態均為 `healthy`
 - [ ] `curl http://localhost:8000/health` 回傳 `{"status": "ok"}`
-- [ ] `curl http://localhost:5173` 回傳前端首頁 HTML
+- [ ] `curl http://localhost:8504` 回傳前端首頁 HTML
 
 ---
 
@@ -158,7 +158,7 @@ APScheduler 每 60 秒（盤中）執行一次，UPSERT 進 `stock_ranks`。
 
 **Acceptance criteria:**
 - [ ] `docker compose up -d` 三服務全部健康
-- [ ] 瀏覽器開啟 `http://localhost:5173`，熱力圖正確渲染
+- [ ] 瀏覽器開啟 `http://localhost:8504`，熱力圖正確渲染
 - [ ] 切換「週轉率」/「成交量」模式，格子排序改變
 - [ ] 等待 60 秒，資料自動刷新（時間戳更新）
 - [ ] 在非交易時間訪問，顯示「已收盤」badge

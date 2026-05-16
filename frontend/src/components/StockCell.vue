@@ -94,7 +94,7 @@ function formatPrice(p) {
   position: relative;
   overflow: hidden;
   border: 1px solid rgba(0, 229, 255, 0.1);
-  transition: filter 0.15s, transform 0.15s, border-color 0.15s;
+  transition: filter 0.12s, transform 0.12s, border-color 0.12s;
 }
 
 /* Scan-line shimmer on hover */
@@ -127,8 +127,8 @@ function formatPrice(p) {
   transition: opacity 0.15s;
 }
 .stock-cell:hover {
-  filter: brightness(1.4);
-  transform: scale(1.05);
+  filter: brightness(1.25);
+  transform: scale(1.02);
   z-index: 10;
   border-color: rgba(0, 229, 255, 0.5);
 }
@@ -236,4 +236,63 @@ function formatPrice(p) {
 .pct-up   { color: #ff6b6b; text-shadow: 0 0 7px rgba(255, 80, 80, 0.55); }
 .pct-down { color: #00e676; text-shadow: 0 0 7px rgba(0, 230, 120, 0.55); }
 .pct-flat { color: rgba(140, 200, 230, 0.35); }
+
+@media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) {
+  .stock-cell {
+    transition: none;
+  }
+
+  .stock-cell::before,
+  .stock-cell::after {
+    display: none;
+  }
+
+  .stock-cell:hover {
+    filter: none;
+    transform: none;
+    border-color: rgba(0, 229, 255, 0.1);
+  }
+
+  .cell-rank,
+  .cell-name,
+  .pct-up,
+  .pct-down {
+    text-shadow: none;
+  }
+}
+
+@media (max-width: 1366px), (max-height: 768px) {
+  .stock-cell {
+    padding: 4px 6px;
+  }
+
+  .cell-rank {
+    font-size: 0.52rem;
+  }
+
+  .cell-sector {
+    font-size: 0.46rem;
+    max-width: 52%;
+  }
+
+  .cell-code {
+    font-size: 0.58rem;
+  }
+
+  .cell-price {
+    font-size: 0.62rem;
+  }
+
+  .cell-name {
+    font-size: clamp(0.74rem, 1.2vw, 0.9rem);
+  }
+
+  .cell-value {
+    font-size: 0.56rem;
+  }
+
+  .cell-pct {
+    font-size: 0.66rem;
+  }
+}
 </style>

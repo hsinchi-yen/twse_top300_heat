@@ -11,44 +11,126 @@ import { useStockStore } from '../stores/stockStore'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
 const POLL_INTERVAL_MS = 60_000
+const MAX_BACKOFF_MS = 300_000
 
 export function useStockData() {
   const store = useStockStore()
   let timerId = null
+  let inFlightPromise = null
+  let abortController = null
+  let nextIntervalMs = POLL_INTERVAL_MS
+  let pollingEnabled = true
 
-  async function fetchData() {
-    store.setLoading(true)
-    try {
-      const res = await fetch(`${API_BASE}/api/stocks/top100?mode=${store.mode}&limit=300`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      store.setData(data)
-
-      // Stop polling after market closes
-      if (!data.market_open) {
-        clearInterval(timerId)
-        timerId = null
-      }
-    } catch (err) {
-      store.setError(err.message)
-    } finally {
-      store.setLoading(false)
+  function clearTimer() {
+    if (timerId) {
+      clearTimeout(timerId)
+      timerId = null
     }
   }
 
+  function scheduleNextPoll() {
+    clearTimer()
+    if (!pollingEnabled) return
+    timerId = setTimeout(() => {
+      fetchData()
+    }, nextIntervalMs)
+  }
+
+  async function fetchData() {
+    // Single-flight: reuse current request when polling/mode switch overlap.
+    if (inFlightPromise) return inFlightPromise
+
+    abortController = new AbortController()
+    store.setLoading(true)
+
+    const request = (async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE}/api/stocks/top100?mode=${store.mode}&limit=100`,
+          { signal: abortController.signal }
+        )
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        store.setData(data)
+        nextIntervalMs = POLL_INTERVAL_MS
+
+        // Stop polling after market closes
+        if (!data.market_open) {
+          pollingEnabled = false
+          clearTimer()
+        } else {
+          scheduleNextPoll()
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          store.setError(err.message)
+          nextIntervalMs = Math.min(nextIntervalMs * 2, MAX_BACKOFF_MS)
+          scheduleNextPoll()
+        }
+      } finally {
+        store.setLoading(false)
+      }
+    })()
+
+    inFlightPromise = request.finally(() => {
+      if (inFlightPromise === request) {
+        inFlightPromise = null
+      }
+      abortController = null
+    })
+
+    return inFlightPromise
+  }
+
   function startPolling() {
-    clearInterval(timerId)
+    pollingEnabled = true
+    nextIntervalMs = POLL_INTERVAL_MS
+    clearTimer()
     fetchData()
-    timerId = setInterval(fetchData, POLL_INTERVAL_MS)
+  }
+
+  function stopPolling() {
+    pollingEnabled = false
+    clearTimer()
   }
 
   // Re-fetch immediately on mode change
   watch(() => store.mode, () => startPolling())
 
+  function onVisibilityChange() {
+    if (document.hidden) {
+      stopPolling()
+      return
+    }
+    if (!navigator.onLine) {
+      return
+    }
+    startPolling()
+  }
+
+  function onOnline() {
+    startPolling()
+  }
+
+  function onOffline() {
+    stopPolling()
+  }
+
   // Start on mount
   startPolling()
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  window.addEventListener('online', onOnline)
+  window.addEventListener('offline', onOffline)
 
-  onUnmounted(() => clearInterval(timerId))
+  onUnmounted(() => {
+    stopPolling()
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+    window.removeEventListener('online', onOnline)
+    window.removeEventListener('offline', onOffline)
+    if (abortController) {
+      abortController.abort()
+    }
+  })
 
   return { fetchData }
 }
