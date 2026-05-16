@@ -10,6 +10,7 @@ class StockRank(Base):
     name = Column(String, nullable=False)
     date = Column(String, nullable=False)          # 'YYYY-MM-DD'
     volume = Column(Integer)
+    close_price = Column(Float)
     turnover_rate = Column(Float)
     price_change_pct = Column(Float)
     color_tier = Column(String)

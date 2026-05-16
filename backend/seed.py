@@ -8,8 +8,12 @@ import os
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
+from models.stock import Base
+
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/twse_heat.db")
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+
+Base.metadata.create_all(bind=engine)
 Session = sessionmaker(bind=engine)
 
 # 題材對照表種子資料

@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 export const useStockStore = defineStore('stock', () => {
-  const mode = ref('volume')       // 'volume' | 'turnover'
+  const mode = ref('turnover')      // 'volume' | 'turnover'
   const sectors = ref([])
   const date = ref('')
   const marketOpen = ref(true)

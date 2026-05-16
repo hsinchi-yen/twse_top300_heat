@@ -1,5 +1,24 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: #0d0d0d; color: #e0e0e0; }
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #111; }
-::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+body {
+  background: #050810;
+  color: #c8d8e8;
+  font-family: 'Inter', 'Noto Sans TC', sans-serif;
+  /* subtle dot-grid texture */
+  background-image: radial-gradient(rgba(0, 229, 255, 0.04) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* ── Neon Scrollbar ── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: #050810; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #00e5ff 0%, #7c4dff 100%);
+  border-radius: 3px;
+}
+
+/* ── Monospace number class (used globally) ── */
+.mono {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+}

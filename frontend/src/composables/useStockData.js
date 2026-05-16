@@ -19,7 +19,7 @@ export function useStockData() {
   async function fetchData() {
     store.setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/stocks/top100?mode=${store.mode}`)
+      const res = await fetch(`${API_BASE}/api/stocks/top100?mode=${store.mode}&limit=300`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       store.setData(data)

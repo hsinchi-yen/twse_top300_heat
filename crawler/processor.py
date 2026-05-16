@@ -10,18 +10,15 @@ processor.py — 合併 TWSE + TPEX 資料，計算週轉率與排名
 from __future__ import annotations
 
 
-_COLOR_TIERS = [
-    (5.0, "deep_red"),
-    (1.0, "light_red"),
-    (-1.0, "neutral"),
-    (-5.0, "light_green"),
-]
-
-
 def _color_tier(pct: float) -> str:
-    for threshold, tier in _COLOR_TIERS:
-        if pct >= threshold:
-            return tier
+    if pct >= 5.0:
+        return "deep_red"
+    if pct >= 1.0:
+        return "light_red"
+    if pct > -1.0:
+        return "neutral"
+    if pct >= -5.0:
+        return "light_green"
     return "deep_green"
 
 

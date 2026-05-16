@@ -10,33 +10,15 @@ from __future__ import annotations
 
 SECTORS = ["AI", "散熱", "機器人", "重電", "航運", "PCB", "半導體"]
 
-# 色階邊界（台股：漲=紅，跌=綠）
-_COLOR_TIERS = [
-    (5.0, "deep_red"),
-    (1.0, "light_red"),
-    (-1.0, "neutral"),
-    (-5.0, "light_green"),
-]
-
-
 def compute_color_tier(price_change_pct: float) -> str:
-    """
-    將漲跌幅百分比對應至 5 段色階字串。
-
-    >>> compute_color_tier(6.0)
-    'deep_red'
-    >>> compute_color_tier(3.0)
-    'light_red'
-    >>> compute_color_tier(0.0)
-    'neutral'
-    >>> compute_color_tier(-2.0)
-    'light_green'
-    >>> compute_color_tier(-6.0)
-    'deep_green'
-    """
-    for threshold, tier in _COLOR_TIERS:
-        if price_change_pct >= threshold:
-            return tier
+    if price_change_pct >= 5.0:
+        return "deep_red"
+    if price_change_pct >= 1.0:
+        return "light_red"
+    if price_change_pct > -1.0:
+        return "neutral"
+    if price_change_pct >= -5.0:
+        return "light_green"
     return "deep_green"
 
 
