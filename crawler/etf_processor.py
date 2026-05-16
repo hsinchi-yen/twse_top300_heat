@@ -219,20 +219,31 @@ def merge_etf_data(
 
 def compute_etf_ranks(records: list[dict]) -> list[dict]:
     """
-    Assigns turnover_rank (by turnover_rate desc, None last)
-    and asset_scale_rank (by asset_scale desc, None last).
-    Mutates records in place and returns them.
+    Assigns turnover_rank and asset_scale_rank.
+
+    Fallback when primary key is None:
+      turnover_rank  → uses volume as proxy (most-traded = rank 1)
+      asset_scale_rank → uses volume as proxy (same proxy, different sort path)
+    This ensures the two sort modes remain visibly distinct on non-trading days.
     """
     by_turnover = sorted(
         records,
-        key=lambda r: (r["turnover_rate"] is None, -(r["turnover_rate"] or 0))
+        key=lambda r: (
+            r["turnover_rate"] is None,
+            -(r["turnover_rate"] or 0),
+            -(r["volume"] or 0),      # fallback: volume descending
+        )
     )
     for i, r in enumerate(by_turnover, 1):
         r["turnover_rank"] = i
 
     by_scale = sorted(
         records,
-        key=lambda r: (r["asset_scale"] is None, -(r["asset_scale"] or 0))
+        key=lambda r: (
+            r["asset_scale"] is None,
+            -(r["asset_scale"] or 0),
+            -(r["volume"] or 0),      # fallback: volume descending
+        )
     )
     for i, r in enumerate(by_scale, 1):
         r["asset_scale_rank"] = i
