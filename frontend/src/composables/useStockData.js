@@ -9,7 +9,7 @@
 import { watch, onUnmounted } from 'vue'
 import { useStockStore } from '../stores/stockStore'
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 const POLL_INTERVAL_MS = 60_000
 const MAX_BACKOFF_MS = 300_000
 
