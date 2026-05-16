@@ -36,3 +36,7 @@ skills-lock.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Docker build artifacts
+*.tar.gz
+embedded_deployment/deploy_pkg/
