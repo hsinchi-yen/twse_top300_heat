@@ -1,14 +1,14 @@
 /**
- * colorTier.js — 5-segment color tier mapping (SPEC palette)
+ * colorTier.js — 5-segment color tier mapping (Cyberpunk palette)
  * Taiwan convention: rise = red/crimson, fall = green/teal
  */
 
 export const COLOR_MAP = {
-  deep_red:    '#C62828',
-  light_red:   '#EF5350',
-  neutral:     '#424242',
-  light_green: '#43A047',
-  deep_green:  '#1B5E20',
+  deep_red:    '#4a0a0a',
+  light_red:   '#3a1212',
+  neutral:     '#0d1520',
+  light_green: '#0a2a1a',
+  deep_green:  '#062015',
 }
 
 // Neon glow accent per tier (for CSS box-shadow)

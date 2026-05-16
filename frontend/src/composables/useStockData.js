@@ -46,7 +46,7 @@ export function useStockData() {
     const request = (async () => {
       try {
         const res = await fetch(
-          `${API_BASE}/api/stocks/top100?mode=${store.mode}&limit=100`,
+          `${API_BASE}/api/stocks/top100?mode=${store.mode}&limit=300`,
           { signal: abortController.signal }
         )
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
