@@ -10,10 +10,10 @@
       <!-- dynamic ETF grid -->
       <div class="etf-grid" :style="gridStyle" :data-size="gridSize">
         <EtfCell
-          v-for="etf in pageEtfs"
+          v-for="(etf, idx) in pageEtfs"
           :key="etf.etf_id"
           :etf="etf"
-          :sort-by="etfSortBy"
+          :rank="pageStart + idx + 1"
         />
         <div
           v-for="i in emptyCount"
@@ -89,8 +89,22 @@ const gridStyle = computed(() => ({
 }))
 
 const sortedEtfs = computed(() => {
-  const rankKey = etfSortBy.value === 'asset_scale' ? 'asset_scale_rank' : 'turnover_rank'
-  return [...etfs.value].sort((a, b) => (a[rankKey] ?? 9999) - (b[rankKey] ?? 9999))
+  const arr = [...etfs.value]
+  if (etfSortBy.value === 'asset_scale') {
+    return arr.sort((a, b) => {
+      if (a.asset_scale == null && b.asset_scale == null) return (b.volume ?? 0) - (a.volume ?? 0)
+      if (a.asset_scale == null) return 1
+      if (b.asset_scale == null) return -1
+      return b.asset_scale - a.asset_scale
+    })
+  }
+  // turnover mode: sort by turnover_rate, fallback to volume when null
+  return arr.sort((a, b) => {
+    if (a.turnover_rate == null && b.turnover_rate == null) return (b.volume ?? 0) - (a.volume ?? 0)
+    if (a.turnover_rate == null) return 1
+    if (b.turnover_rate == null) return -1
+    return b.turnover_rate - a.turnover_rate
+  })
 })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(sortedEtfs.value.length / pageSize.value)))

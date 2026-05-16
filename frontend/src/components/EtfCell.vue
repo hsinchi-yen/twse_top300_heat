@@ -23,11 +23,15 @@
         <span class="tooltip-label">持股週轉率</span>
         <span class="tooltip-val tooltip-val--portfolio">{{ formatPortfolioTurnover(etf.portfolio_turnover) }}</span>
       </div>
+      <div class="tooltip-row">
+        <span class="tooltip-label">漲跌幅</span>
+        <span class="tooltip-val" :class="pctClass">{{ formatPct(etf.price_change_pct) }}</span>
+      </div>
     </div>
 
     <!-- 頂部：排名 | ETF類型 | 資產規模 -->
     <div class="cell-top">
-      <span class="cell-rank mono">#{{ sortBy === 'asset_scale' ? etf.asset_scale_rank : etf.turnover_rank }}</span>
+      <span class="cell-rank mono">#{{ rank }}</span>
       <span class="cell-type-badge" :data-type="etf.etf_type">{{ etf.etf_type }}</span>
       <span class="cell-scale mono">{{ formatScale(etf.asset_scale) }}</span>
     </div>
@@ -41,10 +45,10 @@
     <!-- 名稱 -->
     <div class="cell-name">{{ etf.name }}</div>
 
-    <!-- 底部：週轉率 + 漲跌幅 -->
+    <!-- 底部：持股週轉率(左) + 成交量週轉率(右) -->
     <div class="cell-bottom">
-      <div class="cell-value mono">{{ formatTurnover(etf.turnover_rate) }}</div>
-      <div class="cell-pct mono" :class="pctClass">{{ formatPct(etf.price_change_pct) }}</div>
+      <div class="cell-portfolio mono">{{ formatPortfolioTurnover(etf.portfolio_turnover) }}</div>
+      <div class="cell-turnover mono">{{ formatTurnover(etf.turnover_rate) }}</div>
     </div>
   </div>
 </template>
@@ -54,8 +58,8 @@ import { computed } from 'vue'
 import { etfTierToColor, etfTierToGlow } from '../utils/colorTier'
 
 const props = defineProps({
-  etf:    { type: Object, required: true },
-  sortBy: { type: String, default: 'turnover' },
+  etf:  { type: Object, required: true },
+  rank: { type: Number, default: 0 },
 })
 
 const cellStyle = computed(() => ({
@@ -63,10 +67,9 @@ const cellStyle = computed(() => ({
   boxShadow: `inset 0 0 24px ${etfTierToGlow(props.etf.color_tier)}, 0 0 1px rgba(255,179,0,0.08)`,
 }))
 
-const tooltipText = computed(() => {
-  const r = props.sortBy === 'asset_scale' ? props.etf.asset_scale_rank : props.etf.turnover_rank
-  return `#${r} ${props.etf.etf_id} ${props.etf.name}｜${props.etf.etf_type}｜${formatScale(props.etf.asset_scale)}｜週轉率${formatTurnover(props.etf.turnover_rate)}`
-})
+const tooltipText = computed(() =>
+  `#${props.rank} ${props.etf.etf_id} ${props.etf.name}｜${props.etf.etf_type}｜${formatScale(props.etf.asset_scale)}｜成交量週轉${formatTurnover(props.etf.turnover_rate)}`
+)
 
 const pctClass = computed(() => {
   const p = props.etf.price_change_pct
@@ -315,21 +318,26 @@ function formatPortfolioTurnover(v) {
   gap: 2px;
 }
 
-.cell-value {
-  font-size: 0.6rem;
-  color: rgba(255, 200, 80, 0.55);
+/* 持股週轉率（左下）— 年化，偏暗 */
+.cell-portfolio {
+  font-size: 0.58rem;
+  color: rgba(255, 190, 70, 0.45);
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
-.cell-pct {
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+/* 成交量週轉率（右下）— 日成交，稍亮 */
+.cell-turnover {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: rgba(255, 210, 100, 0.7);
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
-.pct-up   { color: #ff6b6b; text-shadow: 0 0 7px rgba(255, 80, 80, 0.55); }
-.pct-down { color: #00e676; text-shadow: 0 0 7px rgba(0, 230, 120, 0.55); }
+
+/* hover tooltip 漲跌幅顏色（仍保留在 tooltip 裡） */
+.pct-up   { color: #ff6b6b; }
+.pct-down { color: #00e676; }
 .pct-flat { color: rgba(255, 200, 80, 0.3); }
 
 @media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) {
@@ -347,8 +355,8 @@ function formatPortfolioTurnover(v) {
   .cell-code { font-size: 0.58rem; }
   .cell-price { font-size: 0.62rem; }
   .cell-name { font-size: clamp(0.7rem, 1.15vw, 0.88rem); }
-  .cell-value { font-size: 0.54rem; }
-  .cell-pct { font-size: 0.66rem; }
+  .cell-portfolio { font-size: 0.52rem; }
+  .cell-turnover  { font-size: 0.56rem; }
   .tooltip-label { font-size: 0.52rem; }
   .tooltip-val { font-size: 0.6rem; }
 }
