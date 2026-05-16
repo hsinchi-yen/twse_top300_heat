@@ -1,0 +1,6 @@
+requests==2.31.0
+FinMind==1.6.17
+apscheduler==3.10.4
+sqlalchemy==2.0.30
+pytest==8.2.0
+pytest-mock==3.14.0

@@ -1,0 +1,108 @@
+1. 最佳推薦：FinMind（最方便、資料完整）
+FinMind 是專為台股設計的開源金融資料平台，提供 75+ 種資料集，包含每日股價（含成交量）、週轉率相關計算基礎等，每天更新。
+
+關鍵資料集：
+TaiwanStockPrice 或 taiwan_stock_daily：包含個股每日 成交量 (volume)、成交值、股本等。
+可一次取得多檔或全部股票的歷史/當日資料。
+週轉率 = 成交量 / 流通股數（或發行股數），可從 TaiwanStockInfo（股本/流通資訊） + 成交量資料自行計算，或用市值/股本相關資料集輔助。
+
+使用方式（Python）：Pythonfrom FinMind.data import DataLoader
+import pandas as pd
+
+dl = DataLoader()
+# 可註冊免費 token 提高額度（官網有說明）
+# dl.login_by_token("your_token")
+
+# 取得所有股票當日或指定日期資料（或歷史區間）
+df = dl.taiwan_stock_daily(start_date="2026-05-01")  # 或指定 stock_id_list
+# 或用 stock_id='ALL' / 多檔方式
+
+# 計算週轉率（範例）
+info = dl.taiwan_stock_info()  # 取得股本等
+df = df.merge(info[['stock_id', 'issue_shares']], on='stock_id', how='left')
+df['turnover_rate'] = df['volume'] / df['issue_shares'] * 100  # 依實際欄位調整
+
+# 前100排名
+top_volume = df.nlargest(100, 'volume')
+top_turnover = df.nlargest(100, 'turnover_rate')
+
+優點：免費額度足夠日常使用，有 Python SDK、REST API、歷史資料完整。適合你寫工具每天跑一次產生排名。
+2. TWSE 官方 OpenAPI（強烈推薦，穩定無被擋風險）
+TWSE 提供官方 OpenAPI（https://openapi.twse.com.tw/），直接支援多種市場報告。
+
+重點端點：
+/exchangeReport/TWT53U：集中市場每日成交量前二十名證券（可直接拿 top 20）。
+其他如每日成交資訊、統計報表等。
+可取得全市場資料後自行排序 top 100。
+
+結合 TWSE 歷史交易資料頁面或 CSV 下載，也能補足。
+TPEX（櫃買） 也有類似 OpenAPI，提供成交量/值/週轉率排行。
+
+使用：直接用 requests GET 這些端點，JSON 格式乾淨。官方 API 有使用規範，但日常排名用途通常沒問題。
+3. 網頁爬蟲作為補充（最後選擇）
+如果 API 不夠用，可爬：
+
+TWSE 每日成交量前二十名頁面（https://www.twse.com.tw/zh/trading/historical/mi-stock20.html）。
+Yahoo 財經、Wantgoo、TradingView 等排行頁面（但資料可能非官方）。
+使用 requests + BeautifulSoup / Selenium（動態頁面）。
+
+但不推薦大量每日全市場爬，容易被偵測。
+如何避免被擋（關鍵重點）
+
+優先用 API：TWSE OpenAPI、FinMind、data.gov.tw 開放資料 —— 這些都是官方/半官方允許的介接方式，幾乎不會被擋。
+爬蟲防護措施（如果一定要用）：
+加隨機延遲：每次 request 間隔 1~5 秒 + random（time.sleep(random.uniform(1,3))）。
+User-Agent 輪換：模擬不同瀏覽器（用 fake-useragent 套件）。
+Proxy / IP 輪換：若長期大量跑，可用住宅 Proxy（但成本高）。
+只爬必要資料：不要每分鐘全掃，只在收盤後（15:30 後）跑一次每日排名。
+遵守 robots.txt + 使用條款：TWSE 有明確規範，勿過度。
+Header 完整：帶上 Referer、Accept 等。
+分散請求：分批取得股票清單（先用 TaiwanStockInfo 拿所有 stock_id）。
+
+
+實際建議：先用 FinMind 開發原型（最快），再補 TWSE OpenAPI 驗證官方資料。每天只跑一次（例如晚上排程），完全不用擔心被擋。需要 top 100 歷史排名時，用 FinMind 拉一段期間資料排序即可。
+如果你需要完整程式碼範例、特定端點參數，或幫你測試某個 API，回覆我我可以再細寫！記得註冊 FinMind token 提高穩定性。目前需求是在每天下午 4 點開始，爬取當日臺股成交量與週轉率最高的前 100 名並列出來，並依照排名以及成交量的相對比例來進行排行。
+請幫我撰寫一個實作計劃，並產生一個 MD 檔給我。已為您產生完整的 Markdown 實作計劃檔！
+以下是檔案內容摘要與下載方式：
+檔案名稱：台股前100排名實作計劃.md
+Markdown# 台股每日成交量與週轉率前100排名爬蟲工具 - 實作計劃
+
+## 1. 專案目標
+- 每天 **下午 4 點 (臺灣時間)** 自動執行
+- 取得當日臺股 (TWSE + TPEx) **成交量前 100** 與 **週轉率前 100**
+- 合併排名，考慮成交量相對比例 (例如成交量 / 總市場成交量)
+- 輸出 Markdown / CSV / Excel 報告，可寄信或存檔
+
+## 2. 推薦技術棧
+- **Python 3.10+**
+- **FinMind** (主要資料來源) + TWSE OpenAPI 補充
+- **pandas** 資料處理
+- **schedule** 或 **cron** / Windows Task Scheduler 定時
+- **smtplib** 或 **yagmail** 寄報告
+- 可選：`requests`, `beautifulsoup4`, `openpyxl`
+
+## 3. 資料來源與取得方式
+### 主要：FinMind (最推薦)
+```python
+from FinMind.data import DataLoader
+dl = DataLoader()
+df = dl.taiwan_stock_daily(start_date=today)  # 當日
+info = dl.taiwan_stock_info()  # 股本資料
+週轉率計算
+周轉率 (%) = (成交量 / 發行股數) × 100
+官方補充
+
+TWSE Top 20 Volume API / CSV
+TPEx 成交量/週轉率排行頁面
+
+4. 實作步驟（含完整範例程式碼）
+
+安裝套件指令
+核心 stock_ranker.py 完整程式碼（含資料取得、計算排名、輸出 MD 報告）
+定時執行設定（cron / Windows Task Scheduler）
+
+5. 進階功能與注意事項
+
+錯誤重試、Email 通知、歷史比較等
+防被擋策略（每天只跑一次）
+雲端部署建議
