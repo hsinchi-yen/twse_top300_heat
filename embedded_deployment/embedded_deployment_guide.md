@@ -2,7 +2,9 @@
 
 > **適用環境**：僅安裝 Docker Engine（無 docker-compose）的嵌入式 Linux 裝置  
 > **目標平台**：Raspberry Pi 4B / Jetson Nano / 任何執行 Linux + Docker 的 ARM/x86 裝置  
-> **架構**：3 個容器（backend / crawler / frontend）+ 1 個 bridge network + 1 個資料目錄
+> **架構**：3 個容器（backend / crawler / frontend）+ `--network host` + 1 個資料目錄
+
+> ⚠️ **Yocto / 精簡核心注意**：若核心未編譯 `iptable_raw` 模組，Docker 的 port mapping（`-p`）會失敗。本手冊所有指令均採用 `--network host` 模式繞過此限制。
 
 ---
 
@@ -47,7 +49,10 @@ docker --version
 git clone git@github.com:hsinchi-yen/twse_top300_heat.git
 cd twse_top300_heat
 
-# 2. Build 三個映像檔（約需 5-15 分鐘，視裝置效能）
+# 2. 設定前端使用相對 API 路徑（避免瀏覽器打到 localhost:8000）
+echo 'VITE_API_BASE=' > frontend/.env.production
+
+# 3. Build 三個映像檔（約需 5-15 分鐘，視裝置效能）
 docker build -t twse-backend:latest  ./backend
 docker build -t twse-crawler:latest  ./crawler
 docker build -t twse-frontend:latest ./frontend
@@ -89,43 +94,37 @@ docker images | grep twse
 #!/bin/bash
 set -e
 
-APP_DIR="/opt/twse_heat"
-DATA_DIR="${APP_DIR}/data"
-NETWORK="twse-net"
+DATA_DIR="/opt/twse_heat/data"
 
 # ── 1. 建立資料目錄 ──────────────────────────────────────
 mkdir -p "${DATA_DIR}"
 
-# ── 2. 建立隔離網路 ──────────────────────────────────────
-docker network create "${NETWORK}" 2>/dev/null || echo "Network '${NETWORK}' already exists."
+# ── 2. 清理舊容器 ────────────────────────────────────────
+docker rm -f twse-backend twse-crawler twse-frontend 2>/dev/null || true
 
 # ── 3. 啟動 Backend ───────────────────────────────────────
 docker run -d \
   --name twse-backend \
-  --network "${NETWORK}" \
-  -p 8000:8000 \
+  --network host \
   -v "${DATA_DIR}:/app/data" \
   -e DATABASE_URL="sqlite:////app/data/twse_heat.db" \
+  -e TOP100_CACHE_TTL_SECONDS=3 \
+  -e SQLITE_BUSY_TIMEOUT_MS=5000 \
   --restart unless-stopped \
-  --health-cmd "curl -f http://localhost:8000/health || exit 1" \
-  --health-interval 10s \
-  --health-timeout 5s \
-  --health-retries 5 \
   twse-backend:latest
 
-# ── 4. 等待 Backend 健康 ──────────────────────────────────
-echo "Waiting for backend to become healthy..."
+# ── 4. 等待 Backend 就緒 ──────────────────────────────────
+echo "Waiting for backend..."
 for i in $(seq 1 30); do
-  STATUS=$(docker inspect --format='{{.State.Health.Status}}' twse-backend 2>/dev/null || echo "starting")
-  [ "${STATUS}" = "healthy" ] && echo "Backend is healthy." && break
-  [ "$i" -eq 30 ] && echo "ERROR: Backend did not become healthy in 30s." && exit 1
+  curl -sf http://localhost:8000/health >/dev/null 2>&1 && echo "Backend ready." && break
+  [ "$i" -eq 30 ] && echo "ERROR: Backend not ready in 60s." && exit 1
   sleep 2
 done
 
 # ── 5. 啟動 Crawler ───────────────────────────────────────
 docker run -d \
   --name twse-crawler \
-  --network "${NETWORK}" \
+  --network host \
   -v "${DATA_DIR}:/app/data" \
   -e DATABASE_URL="sqlite:////app/data/twse_heat.db" \
   -e FINMIND_TOKEN="${FINMIND_TOKEN:-}" \
@@ -135,15 +134,15 @@ docker run -d \
 # ── 6. 啟動 Frontend ──────────────────────────────────────
 docker run -d \
   --name twse-frontend \
-  --network "${NETWORK}" \
-  -p 8504:80 \
+  --network host \
   --restart unless-stopped \
   twse-frontend:latest
 
 echo ""
 echo "=== 部署完成 ==="
-echo "前端：http://$(hostname -I | awk '{print $1}'):8504"
-echo "API ：http://$(hostname -I | awk '{print $1}'):8000/api/stocks/top100?mode=turnover"
+IP=$(ip addr show | grep 'inet ' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' | cut -d/ -f1)
+echo "前端：http://${IP}:8504"
+echo "API ：http://${IP}:8000/api/stocks/top100?mode=turnover"
 ```
 
 ```bash
@@ -156,13 +155,16 @@ sudo ./start.sh
 
 ## 4. 逐步說明
 
-### 4-1. 建立網路
+### 4-1. 網路模式選擇
 
-容器間透過 `twse-net` 這個私有 bridge network 通訊，彼此用容器名稱（如 `twse-backend`）互相定位，不暴露在外部網路。
+本手冊使用 `--network host`：所有容器直接共用宿主機網路介面，無需 port mapping。
 
-```bash
-docker network create twse-net
-```
+| 模式 | 適用情境 | 說明 |
+|------|----------|------|
+| `--network host` | Yocto / 精簡核心（**本手冊採用**） | 不需 `iptable_raw`，port 直接暴露在宿主機 |
+| Bridge + `-p` | 標準 Linux（Ubuntu / Debian） | 需要核心有 `iptable_raw` 模組 |
+
+> **Yocto 常見錯誤**：若出現 `can't initialize iptables table 'raw'`，表示核心缺少 `iptable_raw` 模組，必須改用 `--network host`。
 
 ### 4-2. 建立資料目錄
 
@@ -178,39 +180,34 @@ sudo chown $USER:$USER /opt/twse_heat/data
 ```bash
 docker run -d \
   --name twse-backend \
-  --network twse-net \
-  -p 8000:8000 \
+  --network host \
   -v /opt/twse_heat/data:/app/data \
   -e DATABASE_URL="sqlite:////app/data/twse_heat.db" \
+  -e TOP100_CACHE_TTL_SECONDS=3 \
+  -e SQLITE_BUSY_TIMEOUT_MS=5000 \
   --restart unless-stopped \
-  --health-cmd "curl -f http://localhost:8000/health || exit 1" \
-  --health-interval 10s \
-  --health-timeout 5s \
-  --health-retries 5 \
   twse-backend:latest
 ```
 
 | 參數 | 說明 |
 |------|------|
 | `-d` | 背景執行 |
-| `--name twse-backend` | 容器名稱（其他容器用此名稱連線） |
-| `--network twse-net` | 加入隔離網路 |
-| `-p 8000:8000` | 宿主機 8000 → 容器 8000 |
+| `--name twse-backend` | 容器名稱 |
+| `--network host` | 共用宿主機網路，直接佔用 host:8000 |
 | `-v .../data:/app/data` | SQLite DB 持久化掛載 |
 | `--restart unless-stopped` | 裝置重開機自動重啟 |
-| `--health-*` | 健康檢查，crawler 啟動前會等待 |
 
-### 4-4. 等待 Backend 健康（必要步驟）
+### 4-4. 等待 Backend 就緒（必要步驟）
 
 Crawler 必須等 Backend 完全就緒再啟動，否則 DB 初始化可能競爭。
 
 ```bash
-# 等待健康狀態
-until [ "$(docker inspect --format='{{.State.Health.Status}}' twse-backend)" = "healthy" ]; do
-  echo "Waiting for backend... ($(docker inspect --format='{{.State.Health.Status}}' twse-backend))"
-  sleep 3
+# 直接 curl health endpoint，避免依賴 docker inspect health status
+for i in $(seq 1 30); do
+  curl -sf http://localhost:8000/health >/dev/null 2>&1 && echo "Backend ready." && break
+  [ "$i" -eq 30 ] && echo "ERROR: Backend not ready in 60s." && exit 1
+  sleep 2
 done
-echo "Backend ready."
 ```
 
 ### 4-5. 啟動 Crawler
@@ -221,7 +218,7 @@ echo "Backend ready."
 
 docker run -d \
   --name twse-crawler \
-  --network twse-net \
+  --network host \
   -v /opt/twse_heat/data:/app/data \
   -e DATABASE_URL="sqlite:////app/data/twse_heat.db" \
   -e FINMIND_TOKEN="${FINMIND_TOKEN:-}" \
@@ -236,25 +233,28 @@ docker run -d \
 ```bash
 docker run -d \
   --name twse-frontend \
-  --network twse-net \
-  -p 8504:80 \
+  --network host \
   --restart unless-stopped \
   twse-frontend:latest
 ```
 
+> **說明**：Frontend nginx 監聽 `8504`（已寫入 `nginx.conf`），`--network host` 直接暴露 host:8504，不需 `-p` 參數。
+
 ### 4-7. 確認所有容器正常
 
 ```bash
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+docker ps --format "table {{.Names}}\t{{.Status}}"
 ```
 
 預期輸出：
 ```
-NAMES            STATUS                    PORTS
-twse-frontend    Up 2 minutes              0.0.0.0:8504->80/tcp
+NAMES            STATUS
+twse-frontend    Up 2 minutes
 twse-crawler     Up 2 minutes
-twse-backend     Up 3 minutes (healthy)    0.0.0.0:8000->8000/tcp
+twse-backend     Up 3 minutes
 ```
+
+> `--network host` 模式下無 PORTS 欄位顯示，直接用宿主機 IP 存取：`http://<device-ip>:8504`
 
 ### 4-8. 驗證 API 正常回應
 
@@ -277,10 +277,7 @@ sudo tee /opt/twse_heat/start.sh > /dev/null << 'EOF'
 #!/bin/bash
 set -e
 DATA_DIR="/opt/twse_heat/data"
-NETWORK="twse-net"
 mkdir -p "${DATA_DIR}"
-
-docker network create "${NETWORK}" 2>/dev/null || true
 
 # 清理可能殘留的舊容器
 docker rm -f twse-backend twse-crawler twse-frontend 2>/dev/null || true
@@ -288,27 +285,24 @@ docker rm -f twse-backend twse-crawler twse-frontend 2>/dev/null || true
 # Backend
 docker run -d \
   --name twse-backend \
-  --network "${NETWORK}" \
-  -p 8000:8000 \
+  --network host \
   -v "${DATA_DIR}:/app/data" \
   -e DATABASE_URL="sqlite:////app/data/twse_heat.db" \
+  -e TOP100_CACHE_TTL_SECONDS=3 \
+  -e SQLITE_BUSY_TIMEOUT_MS=5000 \
   --restart unless-stopped \
-  --health-cmd "curl -f http://localhost:8000/health || exit 1" \
-  --health-interval 10s \
-  --health-timeout 5s \
-  --health-retries 5 \
   twse-backend:latest
 
-# 等待 Backend 健康
+# 等待 Backend 就緒
 for i in $(seq 1 30); do
-  [ "$(docker inspect --format='{{.State.Health.Status}}' twse-backend)" = "healthy" ] && break
+  curl -sf http://localhost:8000/health >/dev/null 2>&1 && break
   sleep 2
 done
 
 # Crawler
 docker run -d \
   --name twse-crawler \
-  --network "${NETWORK}" \
+  --network host \
   -v "${DATA_DIR}:/app/data" \
   -e DATABASE_URL="sqlite:////app/data/twse_heat.db" \
   --restart unless-stopped \
@@ -317,8 +311,7 @@ docker run -d \
 # Frontend
 docker run -d \
   --name twse-frontend \
-  --network "${NETWORK}" \
-  -p 8504:80 \
+  --network host \
   --restart unless-stopped \
   twse-frontend:latest
 EOF
@@ -487,15 +480,12 @@ docker run -d \
   --name twse-backend \
   --memory="128m" \
   --memory-swap="128m" \
-  --network twse-net \
-  -p 8000:8000 \
+  --network host \
   -v /opt/twse_heat/data:/app/data \
   -e DATABASE_URL="sqlite:////app/data/twse_heat.db" \
+  -e TOP100_CACHE_TTL_SECONDS=3 \
+  -e SQLITE_BUSY_TIMEOUT_MS=5000 \
   --restart unless-stopped \
-  --health-cmd "curl -f http://localhost:8000/health || exit 1" \
-  --health-interval 10s \
-  --health-timeout 5s \
-  --health-retries 5 \
   twse-backend:latest
 
 # Crawler：爬取高峰約 80 MB，限制 150 MB
@@ -503,7 +493,7 @@ docker run -d \
   --name twse-crawler \
   --memory="150m" \
   --memory-swap="150m" \
-  --network twse-net \
+  --network host \
   -v /opt/twse_heat/data:/app/data \
   -e DATABASE_URL="sqlite:////app/data/twse_heat.db" \
   --restart unless-stopped \
@@ -514,8 +504,7 @@ docker run -d \
   --name twse-frontend \
   --memory="32m" \
   --memory-swap="32m" \
-  --network twse-net \
-  -p 8504:80 \
+  --network host \
   --restart unless-stopped \
   twse-frontend:latest
 ```
@@ -555,15 +544,57 @@ from main import crawl_job; crawl_job(is_closing=True)
 "
 ```
 
-### 問題：Frontend 空白頁 / API 連線失敗
+### 問題：Frontend 顯示「Failed to fetch」
 
+**原因 1：`VITE_API_BASE` 未設定**  
+Vue.js 預設 fallback 為 `http://localhost:8000`，瀏覽器在遠端 PC 上存取時會打到 **PC 自己的** localhost，導致連線失敗。
+
+修復方式：確認 build 前已建立 `frontend/.env.production`：
 ```bash
-# 確認前端能打到後端
-docker exec twse-frontend wget -qO- http://twse-backend:8000/health
-# 預期輸出：{"status":"ok"}
+echo 'VITE_API_BASE=' > frontend/.env.production
+# 重新 build frontend 映像
+docker build -t twse-frontend:latest ./frontend
+docker rm -f twse-frontend
+docker run -d --name twse-frontend --network host --restart unless-stopped twse-frontend:latest
 ```
 
-**原因**：容器未加入相同 network。確認兩個容器都有 `--network twse-net`。
+驗證 bundle 已無 hardcode：
+```bash
+docker exec twse-frontend grep -r 'localhost:8000' /usr/share/nginx/html/assets/ \
+  && echo 'FOUND (需重 build)' || echo 'OK (使用相對路徑)'
+```
+
+**原因 2：nginx proxy 設定錯誤**  
+`--network host` 模式下後端為 `localhost`，`nginx.conf` 必須如下：
+```nginx
+location /api/ {
+    proxy_pass http://localhost:8000/api/;  # ← 不是 http://backend:8000
+}
+```
+
+驗證 nginx 反向代理是否正常：
+```bash
+curl -sf http://localhost:8504/api/stocks/top100?mode=turnover | head -c 100
+```
+
+### 問題：`can't initialize iptables table 'raw'` / port mapping 失敗
+
+```
+docker: Error response from daemon: ... iptables v1.8.x: can't initialize iptables table `raw':
+Table does not exist (do you need to insmod?)
+```
+
+**原因**：Yocto / 精簡核心未編譯 `iptable_raw` 模組，Docker 28.x 的 Direct Access Filtering 功能需要它。
+
+**確認方式：**
+```bash
+modprobe iptable_raw 2>&1
+# 若出現 "Module iptable_raw not found" 則必須改用 --network host
+```
+
+**解法**：所有容器改用 `--network host`，移除所有 `-p` port mapping 參數，並確認 `nginx.conf` 監聽正確 port（`listen 8504`）。本手冊所有指令已採用此方式。
+
+---
 
 ### 問題：容器啟動後立即 Exited
 

@@ -6,12 +6,12 @@
           <span class="title-flag">🇹🇼</span>
           <span class="title-text">台股熱力圖</span>
         </h1>
-        <ModeToggle :mode="mode" @mode-change="onModeChange" />
+        <ModeToggle :mode="mode" :grid-size="gridSize" @mode-change="onModeChange" @grid-size-change="onGridSizeChange" />
       </div>
       <div class="topbar-right">
         <!-- 資料日期（非今日時顯示） -->
-        <span v-if="dataDate && dataDate !== todayStr" class="badge badge-date">
-          📅 {{ dataDate }}
+        <span v-if="activeDate && activeDate !== todayStr" class="badge badge-date">
+          📅 {{ activeDate }}
         </span>
         <span v-if="!marketOpen" class="badge badge-closed">◼ 已收盤</span>
         <span v-else class="badge badge-open">● 盤中</span>
@@ -20,7 +20,8 @@
     </header>
 
     <main class="main-content">
-      <HeatmapGrid />
+      <HeatmapGrid v-if="mode !== 'etf'" />
+      <EtfGrid v-else />
     </main>
   </div>
 </template>
@@ -30,25 +31,35 @@ import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useStockStore } from './stores/stockStore'
 import { useStockData } from './composables/useStockData'
+import { useEtfData } from './composables/useEtfData'
 import ModeToggle from './components/ModeToggle.vue'
 import HeatmapGrid from './components/HeatmapGrid.vue'
+import EtfGrid from './components/EtfGrid.vue'
 
 const isEmbedded = import.meta.env.VITE_EMBEDDED === 'true'
 
 const store = useStockStore()
-const { mode, marketOpen, updatedAt, date: dataDate } = storeToRefs(store)
+const { mode, gridSize, marketOpen, updatedAt, date: dataDate, etfDate, etfUpdatedAt } = storeToRefs(store)
 
 useStockData()
+useEtfData()
 
 function onModeChange(newMode) {
   store.setMode(newMode)
 }
 
+function onGridSizeChange(n) {
+  store.setGridSize(n)
+}
+
 const todayStr = new Date().toLocaleDateString('sv-SE')  // "2026-05-16"
 
+const activeDate = computed(() => mode.value === 'etf' ? etfDate.value : dataDate.value)
+const activeUpdatedAt = computed(() => mode.value === 'etf' ? etfUpdatedAt.value : updatedAt.value)
+
 const formattedTime = computed(() => {
-  if (!updatedAt.value) return '— : — : —'
-  return new Date(updatedAt.value).toLocaleTimeString('zh-TW', { hour12: false })
+  if (!activeUpdatedAt.value) return '— : — : —'
+  return new Date(activeUpdatedAt.value).toLocaleTimeString('zh-TW', { hour12: false })
 })
 </script>
 

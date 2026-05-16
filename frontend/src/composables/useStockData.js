@@ -94,8 +94,10 @@ export function useStockData() {
     clearTimer()
   }
 
-  // Re-fetch immediately on mode change
-  watch(() => store.mode, () => startPolling())
+  // Re-fetch immediately on stock mode change; ETF mode is handled by useEtfData
+  watch(() => store.mode, (newMode) => {
+    if (newMode !== 'etf') startPolling()
+  })
 
   function onVisibilityChange() {
     if (document.hidden) {

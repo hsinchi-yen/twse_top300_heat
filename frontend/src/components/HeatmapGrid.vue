@@ -7,8 +7,8 @@
     <div v-else-if="allStocks.length === 0" class="state-msg">暫無資料</div>
 
     <template v-else>
-      <!-- 6×6 grid -->
-      <div class="stock-grid">
+      <!-- dynamic grid -->
+      <div class="stock-grid" :style="gridStyle" :data-size="gridSize">
         <StockCell
           v-for="stock in pageStocks"
           :key="stock.stock_id"
@@ -40,7 +40,7 @@
         <span class="page-info">
           第 {{ page + 1 }} / {{ totalPages }} 頁
           &nbsp;·&nbsp;
-          排名 {{ pageStart + 1 }}–{{ pageEnd }}（共 {{ allStocks.length }} 檔）
+          排名 {{ pageStart + 1 }}–{{ pageEnd }}（共 {{ allStocks.length }} 檔 / {{ gridSize }}×{{ gridSize }}）
         </span>
 
         <button class="page-btn" :disabled="page >= totalPages - 1" @click="nextPage">下一頁 ›</button>
@@ -55,14 +55,18 @@ import { storeToRefs } from 'pinia'
 import { useStockStore } from '../stores/stockStore'
 import StockCell from './StockCell.vue'
 
-const COLS = 6
-const ROWS = 6
-const PAGE_SIZE = COLS * ROWS   // 36 張/頁
 const MAX_STOCKS = 300
 
 const store = useStockStore()
-const { sectors, loading, error, mode } = storeToRefs(store)
+const { sectors, loading, error, mode, gridSize } = storeToRefs(store)
 const page = ref(0)
+
+const pageSize = computed(() => gridSize.value * gridSize.value)
+
+const gridStyle = computed(() => ({
+  gridTemplateColumns: `repeat(${gridSize.value}, 1fr)`,
+  gridTemplateRows:    `repeat(${gridSize.value}, 1fr)`,
+}))
 
 // 攤平所有 sector，加上 sector 標籤，依 rank 排序
 const allStocks = computed(() => {
@@ -77,14 +81,15 @@ const allStocks = computed(() => {
     .slice(0, MAX_STOCKS)
 })
 
-const totalPages = computed(() => Math.max(1, Math.ceil(allStocks.value.length / PAGE_SIZE)))
-const pageStart = computed(() => page.value * PAGE_SIZE)
-const pageEnd = computed(() => Math.min(pageStart.value + PAGE_SIZE, allStocks.value.length))
+const totalPages = computed(() => Math.max(1, Math.ceil(allStocks.value.length / pageSize.value)))
+const pageStart = computed(() => page.value * pageSize.value)
+const pageEnd = computed(() => Math.min(pageStart.value + pageSize.value, allStocks.value.length))
 
 const pageStocks = computed(() => allStocks.value.slice(pageStart.value, pageEnd.value))
-const emptyCount = computed(() => PAGE_SIZE - pageStocks.value.length)
+const emptyCount = computed(() => pageSize.value - pageStocks.value.length)
 
-watch(allStocks, () => { page.value = 0 })
+watch(allStocks,  () => { page.value = 0 })
+watch(gridSize,   () => { page.value = 0 })
 
 function prevPage() { if (page.value > 0) page.value-- }
 function nextPage() { if (page.value < totalPages.value - 1) page.value++ }
@@ -102,11 +107,14 @@ function nextPage() { if (page.value < totalPages.value - 1) page.value++ }
 .stock-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  grid-template-rows: repeat(6, 1fr);
+  /* columns/rows set via :style binding from gridSize */
   gap: clamp(4px, 0.55vw, 8px);
   min-height: 0;
 }
+
+/* 4×4：卡片大，gap 稍寬；字體在 StockCell 用 clamp 自動放大 */
+.stock-grid[data-size="4"] { gap: clamp(6px, 0.7vw, 12px); }
+.stock-grid[data-size="5"] { gap: clamp(5px, 0.6vw, 10px); }
 
 .cell-empty {
   background: rgba(0, 255, 255, 0.02);

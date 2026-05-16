@@ -7,7 +7,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import engine, Base
-from routers import stocks, sectors
+from routers import stocks, sectors, etf
+import models.etf  # ensure ETFRank table is registered with Base
 
 Base.metadata.create_all(bind=engine)
 
@@ -61,6 +62,7 @@ async def access_frequency_monitor(request: Request, call_next):
 
 app.include_router(stocks.router, prefix="/api")
 app.include_router(sectors.router, prefix="/api")
+app.include_router(etf.router, prefix="/api")
 
 
 @app.get("/health")
