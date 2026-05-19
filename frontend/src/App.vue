@@ -27,11 +27,12 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useStockStore } from './stores/stockStore'
 import { useStockData } from './composables/useStockData'
 import { useEtfData } from './composables/useEtfData'
+import { fetchScores } from './composables/useScoreData'
 import ModeToggle from './components/ModeToggle.vue'
 import HeatmapGrid from './components/HeatmapGrid.vue'
 import EtfGrid from './components/EtfGrid.vue'
@@ -43,6 +44,7 @@ const { mode, gridSize, marketOpen, updatedAt, date: dataDate, etfDate, etfUpdat
 
 useStockData()
 useEtfData()
+onMounted(fetchScores)
 
 function onModeChange(newMode) {
   store.setMode(newMode)

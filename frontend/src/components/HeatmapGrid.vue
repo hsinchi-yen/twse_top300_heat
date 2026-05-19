@@ -14,6 +14,9 @@
           :key="stock.stock_id"
           :stock="stock"
           :mode="mode"
+          :highlighted="stock.stock_id === highlightedStockId"
+          :buy-score="scores[stock.stock_id] ?? null"
+          :scores-loaded="scoresLoaded"
         />
         <!-- 末頁補空格維持 6×6 -->
         <div
@@ -44,6 +47,19 @@
         </span>
 
         <button class="page-btn" :disabled="page >= totalPages - 1" @click="nextPage">下一頁 ›</button>
+
+        <div class="search-box">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="輸入股號 Enter"
+            maxlength="6"
+            @keydown.enter="doSearch"
+            class="search-input"
+          />
+          <button v-if="searchQuery" class="search-clear" @click="clearSearch">×</button>
+          <p v-if="searchError" class="search-error">{{ searchError }}</p>
+        </div>
       </div>
     </template>
   </div>
@@ -58,8 +74,12 @@ import StockCell from './StockCell.vue'
 const MAX_STOCKS = 300
 
 const store = useStockStore()
-const { sectors, loading, error, mode, gridSize } = storeToRefs(store)
+const { sectors, loading, error, mode, gridSize, scores, scoresLoaded } = storeToRefs(store)
 const page = ref(0)
+const searchQuery = ref('')
+const searchError = ref('')
+const highlightedStockId = ref('')
+let highlightTimer = null
 
 const pageSize = computed(() => gridSize.value * gridSize.value)
 
@@ -88,11 +108,36 @@ const pageEnd = computed(() => Math.min(pageStart.value + pageSize.value, allSto
 const pageStocks = computed(() => allStocks.value.slice(pageStart.value, pageEnd.value))
 const emptyCount = computed(() => pageSize.value - pageStocks.value.length)
 
-watch(allStocks,  () => { page.value = 0 })
-watch(gridSize,   () => { page.value = 0 })
+watch(allStocks, () => { page.value = 0 })
+watch(gridSize,  () => { page.value = 0 })
+watch(mode,      clearSearch)
 
 function prevPage() { if (page.value > 0) page.value-- }
 function nextPage() { if (page.value < totalPages.value - 1) page.value++ }
+
+function doSearch() {
+  const query = searchQuery.value.trim()
+  searchError.value = ''
+  highlightedStockId.value = ''
+  if (highlightTimer) { clearTimeout(highlightTimer); highlightTimer = null }
+  if (!query) return
+
+  const idx = allStocks.value.findIndex(s => s.stock_id === query)
+  if (idx === -1) {
+    searchError.value = `找不到 ${query}，不在 Top ${allStocks.value.length} 範圍內`
+    return
+  }
+  page.value = Math.floor(idx / pageSize.value)
+  highlightedStockId.value = query
+  highlightTimer = setTimeout(() => { highlightedStockId.value = '' }, 3000)
+}
+
+function clearSearch() {
+  searchQuery.value = ''
+  searchError.value = ''
+  highlightedStockId.value = ''
+  if (highlightTimer) { clearTimeout(highlightTimer); highlightTimer = null }
+}
 </script>
 
 <style scoped>
@@ -198,6 +243,66 @@ function nextPage() { if (page.value < totalPages.value - 1) page.value++ }
   white-space: nowrap;
 }
 
+/* ── 搜尋框 ── */
+.search-box {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.search-input {
+  background: #0a1520;
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  border-radius: 4px;
+  color: #a0d2f0;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.78rem;
+  padding: 0.28rem 1.8rem 0.28rem 0.6rem;
+  width: 130px;
+  letter-spacing: 0.05em;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.search-input::placeholder {
+  color: rgba(0, 229, 255, 0.25);
+  font-size: 0.7rem;
+}
+
+.search-input:focus {
+  border-color: #00e5ff;
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
+}
+
+.search-clear {
+  position: absolute;
+  right: 5px;
+  background: none;
+  border: none;
+  color: rgba(0, 229, 255, 0.4);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0 3px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.search-clear:hover { color: #00e5ff; }
+
+.search-error {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 3px;
+  font-size: 0.65rem;
+  color: #ff4444;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+}
+
 /* ── 狀態訊息 ── */
 .state-msg {
   color: #444;
@@ -236,6 +341,12 @@ function nextPage() { if (page.value < totalPages.value - 1) page.value++ }
 
   .page-info {
     font-size: 0.66rem;
+  }
+
+  .search-input {
+    font-size: 0.7rem;
+    width: 110px;
+    padding: 0.22rem 1.6rem 0.22rem 0.5rem;
   }
 
   .state-msg {

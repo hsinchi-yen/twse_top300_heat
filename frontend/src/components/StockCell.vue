@@ -1,6 +1,7 @@
 <template>
   <div
     class="stock-cell"
+    :class="{ 'cell-highlighted': highlighted }"
     :data-tier="stock.color_tier"
     :style="cellStyle"
     :title="`#${stock.rank} ${stock.stock_id} ${stock.name}｜${stock.sector}｜${valueLabel}`"
@@ -17,8 +18,11 @@
       <span class="cell-price mono" v-if="stock.close_price">{{ formatPrice(stock.close_price) }}</span>
     </div>
 
-    <!-- 名稱 -->
-    <div class="cell-name">{{ stock.name }}</div>
+    <!-- 名稱 + 買入評分 -->
+    <div class="cell-name">
+      <span class="cell-name-text">{{ stock.name }}</span>
+      <span v-if="scoreLabel !== null" class="cell-score mono"> - {{ scoreLabel }}</span>
+    </div>
 
     <!-- 底部：數值 + 漲跌幅 -->
     <div class="cell-bottom">
@@ -33,12 +37,22 @@ import { computed } from 'vue'
 import { tierToColor, tierToGlow } from '../utils/colorTier'
 
 const props = defineProps({
-  stock: { type: Object, required: true },
-  mode:  { type: String, default: 'turnover' },
+  stock:        { type: Object,  required: true },
+  mode:         { type: String,  default: 'turnover' },
+  highlighted:  { type: Boolean, default: false },
+  buyScore:     { type: Object,  default: null },
+  scoresLoaded: { type: Boolean, default: false },
 })
 
 const cellStyle = computed(() => {
   const tier = props.stock.color_tier
+  if (props.highlighted) {
+    return {
+      backgroundColor: tierToColor(tier),
+      boxShadow: `inset 0 0 24px ${tierToGlow(tier)}, 0 0 28px 8px rgba(0, 229, 255, 0.8)`,
+      borderColor: '#00e5ff',
+    }
+  }
   return {
     backgroundColor: tierToColor(tier),
     boxShadow: `inset 0 0 24px ${tierToGlow(tier)}, 0 0 1px rgba(0,229,255,0.08)`,
@@ -58,6 +72,16 @@ const valueLabel = computed(() => {
     : zhang >= 1000
       ? `${(zhang / 1000).toFixed(1)}K`
       : `${zhang}張`
+})
+
+// null  → scores not loaded yet (show nothing)
+// 'N/A' → loaded but no score for this stock
+// '18/24' → normal display
+const scoreLabel = computed(() => {
+  if (!props.scoresLoaded) return null
+  const s = props.buyScore
+  if (!s || s.score == null) return 'N/A'
+  return `${s.score}/${s.max_score ?? 24}`
 })
 
 const pctClass = computed(() => {
@@ -195,20 +219,35 @@ function formatPrice(p) {
   letter-spacing: 0.02em;
 }
 
-/* ── 名稱 ── */
+/* ── 名稱 + 評分 ── */
 .cell-name {
   flex: 1;
   font-size: clamp(0.82rem, 1.4vw, 1.05rem);
   font-weight: 700;
   color: #e8f4ff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   line-height: 1.2;
   text-shadow: 0 0 6px rgba(200, 230, 255, 0.25);
   display: flex;
   align-items: center;
   min-height: 0;
+  overflow: hidden;
+}
+
+.cell-name-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.cell-score {
+  font-size: 0.58rem;
+  font-weight: 400;
+  color: rgba(140, 200, 230, 0.55);
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.01em;
 }
 
 /* ── 底部：數值 + 漲跌幅 ── */
@@ -236,6 +275,16 @@ function formatPrice(p) {
 .pct-up   { color: #ff6b6b; text-shadow: 0 0 7px rgba(255, 80, 80, 0.55); }
 .pct-down { color: #00e676; text-shadow: 0 0 7px rgba(0, 230, 120, 0.55); }
 .pct-flat { color: rgba(140, 200, 230, 0.35); }
+
+.cell-highlighted {
+  animation: pulse-highlight 0.6s ease-in-out 3;
+  z-index: 20;
+}
+
+@keyframes pulse-highlight {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
+}
 
 @media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) {
   .stock-cell {
@@ -285,6 +334,10 @@ function formatPrice(p) {
 
   .cell-name {
     font-size: clamp(0.74rem, 1.2vw, 0.9rem);
+  }
+
+  .cell-score {
+    font-size: 0.52rem;
   }
 
   .cell-value {

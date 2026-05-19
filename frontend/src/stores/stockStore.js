@@ -14,6 +14,10 @@ export const useStockStore = defineStore('stock', () => {
   const loading = ref(false)
   const error = ref(null)
 
+  // ── buy score state ──
+  const scores = ref({})          // {stock_id: {score, max_score}}
+  const scoresLoaded = ref(false)
+
   // ── ETF state ──
   const etfs = ref([])
   const etfDate = ref('')
@@ -67,11 +71,17 @@ export const useStockStore = defineStore('stock', () => {
     etfSortBy.value = val
   }
 
+  function setScores(payload) {
+    scores.value = payload
+    scoresLoaded.value = true
+  }
+
   return {
     gridSize, setGridSize,
     mode, sectors, date, marketOpen, updatedAt, loading, error,
     setMode, setData, setLoading, setError,
     etfs, etfDate, etfUpdatedAt, etfLoading, etfError, etfSortBy,
     setEtfData, setEtfLoading, setEtfError, setEtfSortBy,
+    scores, scoresLoaded, setScores,
   }
 })

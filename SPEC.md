@@ -289,3 +289,86 @@ CREATE TABLE sector_map (
 2. **後台維護介面** — 是否需要 Web UI 編輯題材對照表，還是直接操作 SQLite？
 3. **爆量閃爍** — MVP 就做還是 Phase 2？
 4. **TPEX 上櫃** — MVP 是否只做上市（TWSE），上櫃之後再補？
+
+---
+
+## Feature: 買入評分 (Buy Score)
+
+### 目標
+在每支股票卡片名稱旁顯示來自 StockAnalysisDashBoard 的買入評分（如 `台積電 - 18/24`），協助使用者快速判斷買入強度，不額外消耗本專案的 FinMind token。
+
+### 決策紀錄
+| 問題 | 決策 | 原因 |
+|------|------|------|
+| 資料來源 | 代理 StockAnalysisDashBoard API | 評分邏輯已實作，不重複建置；StockAnalysisDashBoard 有自己的 FinMind daily cache |
+| 儲存方式 | JSON 檔案 `data/buy_scores/YYYY-MM-DD.json` | 不動 DB schema；簡單、可檢視、易回溯 |
+| 計算時機 | 每工作日 16:05（收盤後 5 分鐘） | 一天一次，法人資料盤後才完整 |
+| 顯示格式 | `股票名稱 - score/max_score`（如 `台積電 - 18/24`） | 最精簡，卡片空間有限 |
+| 無資料處理 | 顯示 `N/A` | 財報不完整或 API 失敗的股票 |
+| 盤中顯示 | 顯示昨日分數（最新可用 JSON） | 不延誤頁面載入 |
+| ETF 頁面 | 不顯示 | ETF 無個股財報，評分無意義 |
+
+### 資料流
+
+```
+每工作日 16:05
+  Crawler (score_job)
+    → GET http://host.docker.internal:18000/api/stocks/{id}/buy_score  (100次，間隔1.2秒)
+    → StockAnalysisDashBoard 回傳 {score, max_score, ...}（當日已快取，不耗 FinMind token）
+    → 寫入 /app/data/buy_scores/YYYY-MM-DD.json
+    → 保留最近 7 天檔案
+
+Backend GET /api/scores
+  → 讀最新 JSON（今天 > 昨天 > 最近交易日）
+  → 記憶體快取（每天一份，重啟後重讀）
+  → 回傳 {date, scores: {stock_id: {score, max_score}}}
+
+Frontend (App.vue onMounted)
+  → fetchScores() 一次性呼叫 /api/scores
+  → scores 存入 Pinia store (useStockStore)
+  → HeatmapGrid 將 buyScore prop 傳給 StockCell
+  → StockCell 在名稱後顯示 " - 18/24" 或 " - N/A"
+```
+
+### 新 API Contract
+
+#### `GET /api/scores`
+```json
+{
+  "date": "2026-05-19",
+  "generated_at": "2026-05-19T16:15:00+08:00",
+  "scores": {
+    "2330": { "score": 18, "max_score": 24 },
+    "2317": { "score": 12, "max_score": 24 }
+  }
+}
+```
+- 無資料時：`{"date": "", "scores": {}}`
+- 快取：backend 記憶體快取，每日首次請求讀檔
+
+### 新增 / 修改的檔案
+
+| 檔案 | 類型 | 說明 |
+|------|------|------|
+| `crawler/sources/buy_score.py` | 新增 | fetch / write / load scores JSON |
+| `crawler/main.py` | 修改 | 16:05 新增 `score_job` |
+| `backend/routers/scores.py` | 新增 | `GET /api/scores` 端點 |
+| `backend/main.py` | 修改 | 註冊 scores router |
+| `frontend/src/composables/useScoreData.js` | 新增 | 一次性 fetch /api/scores |
+| `frontend/src/stores/stockStore.js` | 修改 | 加 `scores`、`scoresLoaded` state |
+| `frontend/src/components/HeatmapGrid.vue` | 修改 | 將 `buyScore` prop 傳給 StockCell |
+| `frontend/src/components/StockCell.vue` | 修改 | 名稱列顯示 score |
+| `frontend/src/App.vue` | 修改 | onMounted 呼叫 fetchScores() |
+| `docker-compose.yml` | 修改 | 加 `STOCK_ANALYSIS_URL`、`SCORES_DIR` env |
+| `crawler/tests/test_buy_score_source.py` | 新增 | crawler 單元測試 |
+| `backend/tests/test_scores_api.py` | 新增 | API 合約測試 |
+| `frontend/tests/StockCell.test.js` | 新增 | component 測試 |
+
+### Success Criteria（買入評分）
+- [ ] 每工作日 16:05 後，`data/buy_scores/YYYY-MM-DD.json` 存在且包含 ≥ 50 支股票分數
+- [ ] `GET /api/scores` 回傳正確 JSON schema
+- [ ] 股票卡片名稱後顯示 `- score/max_score`（分數存在時）
+- [ ] 分數不存在的股票顯示 `- N/A`
+- [ ] 分數尚未載入時卡片名稱正常顯示（無 N/A 亂跳）
+- [ ] 現有熱力圖功能（volume/turnover 排名、分頁、搜尋）無回歸
+- [ ] 所有 pytest 與 vitest 測試通過
