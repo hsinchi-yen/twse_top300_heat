@@ -62,6 +62,26 @@ class TestFetchBuyScore:
         call_url = mock_get.call_args[0][0]
         assert call_url == "http://test-host:9000/api/stocks/2330/buy_score"
 
+    def test_passes_finmind_token_as_header(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"score": 10, "max_score": 24}
+        with patch("sources.buy_score.FINMIND_TOKEN", "test-token-123"):
+            with patch("sources.buy_score.requests.get", return_value=mock_resp) as mock_get:
+                fetch_buy_score("2330")
+        headers = mock_get.call_args[1].get("headers", mock_get.call_args[0][1] if len(mock_get.call_args[0]) > 1 else {})
+        assert headers.get("X-FinMind-Token") == "test-token-123"
+
+    def test_no_token_header_when_empty(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"score": 10, "max_score": 24}
+        with patch("sources.buy_score.FINMIND_TOKEN", ""):
+            with patch("sources.buy_score.requests.get", return_value=mock_resp) as mock_get:
+                fetch_buy_score("2330")
+        headers = mock_get.call_args[1].get("headers", {})
+        assert "X-FinMind-Token" not in headers
+
 
 class TestBatchFetchScores:
     def test_collects_successful_scores(self):

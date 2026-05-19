@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 STOCK_ANALYSIS_URL = os.getenv("STOCK_ANALYSIS_URL", "http://host.docker.internal:18000")
 SCORES_DIR = Path(os.getenv("SCORES_DIR", "/app/data/buy_scores"))
+FINMIND_TOKEN = os.getenv("FINMIND_TOKEN", "")
 TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 REQUEST_DELAY = float(os.getenv("BUY_SCORE_REQUEST_DELAY", "1.2"))
 REQUEST_TIMEOUT = float(os.getenv("BUY_SCORE_TIMEOUT", "30.0"))
@@ -31,10 +32,14 @@ def fetch_buy_score(stock_id: str) -> dict | None:
     """Fetch buy score for one stock from StockAnalysisDashBoard.
 
     Returns {"score": int, "max_score": int} or None on any failure.
+    Passes FINMIND_TOKEN via X-FinMind-Token header if available.
     """
     url = f"{STOCK_ANALYSIS_URL}/api/stocks/{stock_id}/buy_score"
+    headers = {}
+    if FINMIND_TOKEN:
+        headers["X-FinMind-Token"] = FINMIND_TOKEN
     try:
-        resp = requests.get(url, timeout=REQUEST_TIMEOUT)
+        resp = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         if resp.status_code == 200:
             data = resp.json()
             return {
