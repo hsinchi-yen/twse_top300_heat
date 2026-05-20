@@ -10,8 +10,10 @@ main.py — Crawler APScheduler entry point
 import logging
 import os
 import random
+import shutil
 import time as _time
 from datetime import datetime, time
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -22,7 +24,7 @@ from sources.twse import fetch_twse_daily
 from sources.tpex import fetch_tpex_daily
 from sources.yahoo import fetch_yahoo_quotes
 from sources.finmind import fetch_issue_shares, fetch_industry_categories, clear_cache
-from sources.buy_score import batch_fetch_scores, write_scores
+from sources.buy_score import batch_fetch_scores, write_scores, load_scores_for_date
 from processor import merge_and_rank
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -32,6 +34,13 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:////app/data/twse_heat.db")
 TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 MARKET_CLOSE = time(13, 30)
 MIN_VALID_RECORDS = int(os.getenv("MIN_VALID_RECORDS", "80"))
+# Candidate pool: configurable but hard-capped to prevent runaway token cost.
+SCORE_CANDIDATE_LIMIT = min(int(os.getenv("SCORE_CANDIDATE_LIMIT", "480")), 1000)
+# Storage watermark thresholds (§4.1-4.4)
+DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
+STORAGE_WARN_PCT = float(os.getenv("STORAGE_WARN_PCT", "70.0"))
+STORAGE_PROTECT_PCT = float(os.getenv("STORAGE_PROTECT_PCT", "80.0"))
+STORAGE_EMERGENCY_PCT = float(os.getenv("STORAGE_EMERGENCY_PCT", "90.0"))
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 Session = sessionmaker(bind=engine)
@@ -184,12 +193,61 @@ def crawl_job(is_closing: bool = False) -> None:
     logger.info("Crawl job done. %d records upserted for %s.", len(records), date_to_store)
 
 
-def score_job() -> None:
-    """Fetch buy scores for today's stocks and write to JSON cache.
+def check_storage() -> float:
+    """Log disk usage and return usage percentage. Triggers protection warnings."""
+    try:
+        usage = shutil.disk_usage(DATA_DIR)
+        pct = usage.used / usage.total * 100
+        free_mb = usage.free // (1024 * 1024)
+        if pct >= STORAGE_EMERGENCY_PCT:
+            logger.error(
+                "STORAGE EMERGENCY: %.1f%% used, %d MB free — read-only mode recommended",
+                pct, free_mb,
+            )
+        elif pct >= STORAGE_PROTECT_PCT:
+            logger.warning(
+                "STORAGE PROTECTION: %.1f%% used, %d MB free — non-essential writes suspended",
+                pct, free_mb,
+            )
+        elif pct >= STORAGE_WARN_PCT:
+            logger.warning("STORAGE WARNING: %.1f%% used, %d MB free", pct, free_mb)
+        else:
+            logger.info("Storage: %.1f%% used, %d MB free", pct, free_mb)
+        return pct
+    except Exception as exc:
+        logger.warning("check_storage failed: %s", exc)
+        return 0.0
 
-    Runs at 16:05 — 5 minutes after the closing crawl — so StockAnalysisDashBoard
-    has already cached today's scores, meaning no additional FinMind tokens are
-    consumed by this call.
+
+def wal_checkpoint_job() -> None:
+    """Run WAL checkpoint to merge WAL back into the main DB file."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("PRAGMA wal_checkpoint(TRUNCATE)"))
+            conn.commit()
+        logger.info("WAL checkpoint complete")
+    except Exception as exc:
+        logger.warning("WAL checkpoint failed: %s", exc)
+
+
+def vacuum_job() -> None:
+    """Run VACUUM to reclaim space and defragment the DB. Run monthly off-peak."""
+    logger.info("Starting VACUUM...")
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("VACUUM"))
+        logger.info("VACUUM complete")
+    except Exception as exc:
+        logger.warning("VACUUM failed: %s", exc)
+
+
+def score_job() -> None:
+    """Fetch buy scores for today's top-480 stocks by volume, writing to JSON cache.
+
+    Pre-loads today's existing JSON and skips already-scored stocks so an
+    interrupted run resumes from where it left off. Monthly freshness is
+    guaranteed because each calendar day writes to its own YYYY-MM-DD.json;
+    prior-month files are never re-used as today's base.
     """
     now = datetime.now(tz=TZ_TAIPEI)
     today = now.strftime("%Y-%m-%d")
@@ -197,33 +255,79 @@ def score_job() -> None:
 
     with Session() as session:
         rows = session.execute(
-            text(
-                "SELECT stock_id FROM stock_ranks WHERE date = :date "
-                "ORDER BY volume_rank ASC LIMIT 300"
-            ),
-            {"date": today},
+            text("""
+                SELECT stock_id FROM stock_ranks
+                WHERE date = :date
+                  AND volume_rank <= :limit
+                ORDER BY volume_rank ASC
+            """),
+            {"date": today, "limit": SCORE_CANDIDATE_LIMIT},
         ).fetchall()
 
-    stock_ids = [r[0] for r in rows]
-    if not stock_ids:
+    all_stock_ids = [r[0] for r in rows]
+    if not all_stock_ids:
         logger.warning("score_job: no stocks in DB for %s, skipping", today)
         return
 
-    logger.info("score_job: fetching scores for %d stocks", len(stock_ids))
-    scores = batch_fetch_scores(stock_ids)
-    write_scores(scores, today)
-    logger.info("score_job done: %d/%d stocks scored", len(scores), len(stock_ids))
+    # Skip stocks already scored in today's JSON (handles interrupted runs)
+    existing_scores = load_scores_for_date(today)
+    if existing_scores:
+        logger.info("score_job: pre-loaded %d existing scores for %s", len(existing_scores), today)
+
+    stock_ids = [sid for sid in all_stock_ids if sid not in existing_scores]
+    if not stock_ids:
+        logger.info("score_job: all %d stocks already scored for %s, done", len(all_stock_ids), today)
+        return
+
+    logger.info(
+        "score_job: fetching %d/%d stocks (skipping %d already scored)",
+        len(stock_ids), len(all_stock_ids), len(existing_scores),
+    )
+    new_scores = batch_fetch_scores(stock_ids)
+    merged_scores = {**existing_scores, **new_scores}
+    write_scores(merged_scores, today)
+    logger.info("score_job done: %d/%d stocks scored", len(merged_scores), len(all_stock_ids))
 
 
-def daily_reset_job() -> None:
+def prune_old_stock_ranks(keep_days: int = 7) -> None:
+    """Delete stock_ranks rows older than keep_days trading dates."""
+    with Session() as session:
+        # Find cutoff: the Nth most recent date with actual data
+        result = session.execute(
+            text("""
+                SELECT date FROM stock_ranks
+                GROUP BY date HAVING SUM(volume) > 0
+                ORDER BY date DESC
+                LIMIT 1 OFFSET :offset
+            """),
+            {"offset": keep_days},
+        ).fetchone()
+        if not result:
+            return  # fewer than keep_days dates exist — nothing to prune
+        cutoff = result[0]
+        deleted = session.execute(
+            text("DELETE FROM stock_ranks WHERE date <= :cutoff"),
+            {"cutoff": cutoff},
+        ).rowcount
+        session.commit()
+    if deleted:
+        logger.info("Pruned %d stock_rank rows older than %s", deleted, cutoff)
+
+
+def daily_maintenance_job() -> None:
+    """Off-peak maintenance: WAL checkpoint, storage check, cache clear, pruning."""
+    wal_checkpoint_job()
+    check_storage()
     clear_cache()
     refresh_sector_map_job()
-    logger.info("Cache cleared for new trading day.")
+    prune_old_stock_ranks(keep_days=7)
+    logger.info("Daily maintenance complete.")
 
 
 if __name__ == "__main__":
     # 啟動時立即抓一次最新資料，避免容器重啟後要等到下個 cron trigger 才有資料。
     # is_closing=True 繞過盤中時間限制，週末 / 盤後均可執行（total_volume=0 保護仍有效）。
+    check_storage()
     logger.info("Performing startup fetch to load latest available data...")
     try:
         crawl_job(is_closing=True)
@@ -271,25 +375,38 @@ if __name__ == "__main__":
         jitter=20,
     )
 
-    # 每日 08:55 重置 cache
+    # 每日 08:55 維護作業：WAL checkpoint、儲存水位、cache 清除、舊資料修剪
     scheduler.add_job(
-        daily_reset_job,
+        daily_maintenance_job,
         trigger="cron",
         day_of_week="mon-fri",
         hour=8,
         minute=55,
-        id="daily_reset",
+        id="daily_maintenance",
     )
 
-    # 收盤後 16:05 抓買入評分（StockAnalysisDashBoard 已快取，不耗 FinMind token）
+    # 每月1日 03:00 更新買入評分（財報基礎分數，月更新已足夠）
+    # 凌晨執行：伺服器負載低，限速重試（指數退避，最多 2 小時）於清晨完成
+    # 若1日為假日，misfire_grace_time 24h 確保隔日補跑
     scheduler.add_job(
         score_job,
         trigger="cron",
-        day_of_week="mon-fri",
-        hour=16,
-        minute=5,
-        id="score_daily",
-        misfire_grace_time=300,
+        day=1,
+        hour=3,
+        minute=0,
+        id="score_monthly",
+        misfire_grace_time=86400,
+    )
+
+    # 每月1日 02:00 VACUUM（評分跑前先整理 DB）
+    scheduler.add_job(
+        vacuum_job,
+        trigger="cron",
+        day=1,
+        hour=2,
+        minute=0,
+        id="monthly_vacuum",
+        misfire_grace_time=86400,
     )
 
     logger.info("Crawler scheduler started. Market hours: 09:00-13:30, poll every 60s.")

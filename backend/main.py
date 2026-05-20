@@ -37,9 +37,16 @@ ALERT_MAX_REQUESTS = int(os.getenv("ALERT_MAX_REQUESTS", "40"))
 _ip_hits: dict[str, deque[float]] = defaultdict(deque)
 _last_alert_at: dict[str, float] = {}
 
+_allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
+_allowed_origins: list[str] = (
+    [o.strip() for o in _allowed_origins_env.split(",") if o.strip()]
+    if _allowed_origins_env
+    else ["*"]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

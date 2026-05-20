@@ -97,6 +97,17 @@ def load_latest_scores() -> dict:
     return {}
 
 
+def load_scores_for_date(date: str) -> dict:
+    """Return the scores dict for a specific date, or {} if not available."""
+    path = SCORES_DIR / f"{date}.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("scores", {})
+    except Exception:
+        return {}
+
+
 def _prune_old(directory: Path, keep: int) -> None:
     files = sorted(directory.glob("*.json"), reverse=True)
     for old in files[keep:]:

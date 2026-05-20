@@ -1,8 +1,8 @@
-# Spec: 台股前100熱力圖 (TWSE Top 100 Heatmap Dashboard)
+# Spec: 台股前360熱力圖 (TWSE Top 360 Heatmap Dashboard)
 
 ## Objective
 
-建立一個以 **週轉率 / 成交量 Top 100** 為核心的台股熱力圖 Dashboard，可切換兩種排名視角，按題材分區塊呈現，顏色代表漲跌幅。系統以 Docker Compose 部署，支援 Embedded Linux Kiosk 環境，每 60 秒自動更新盤中資料，收盤後鎖定終值。
+建立一個以 **成交量前 360** 為候選池、可切換**成交量 / 週轉率**兩種排名視角的台股熱力圖 Dashboard。按題材分區塊呈現，顏色代表漲跌幅。支援 365 天 × 24 小時嵌入式 Kiosk 連續運行，兼顧 FinMind token 成本控制與 eMMC 儲存壽命。
 
 ### Target Users
 - **Trader / 投資人** — 快速掌握當日資金動向與題材輪動
@@ -12,11 +12,13 @@
 ### Success Criteria
 - [ ] 開啟 Dashboard < 3 秒（首屏 LCP）
 - [ ] 盤中資料每 60 秒自動刷新，無需手動操作
-- [ ] 可在「成交量 Top 100」與「週轉率 Top 100」兩種模式間切換，動畫流暢
-- [ ] 100 個格子固定大小，按題材分區塊（Treemap 風格）排列
+- [ ] 可在「成交量 Top 360」與「週轉率 Top 360」兩種模式間切換，動畫流暢
+- [ ] 格子按題材分區塊（Treemap 風格）排列，6×6 = 36 格為一頁
 - [ ] 5 段色階正確反映漲跌幅（深紅/淺紅/灰/淺綠/深綠）
-- [ ] 收盤後（16:30 後）資料自動鎖定，不再刷新
-- [ ] Docker Compose `docker compose up -d` 一鍵啟動，三個服務全部健康
+- [ ] 收盤後（16:30 後）降頻為每 5 分鐘輕量 check，不再觸發高頻寫入
+- [ ] Docker 一鍵啟動（`bash run_containers.sh`），四個服務全部健康
+- [ ] eMMC 長期穩態使用率 < 70%，不因儲存耗盡造成服務中斷
+- [ ] 每日完整評分批次 ≤ 1 次，快取命中率 ≥ 90%
 
 ---
 
@@ -25,13 +27,13 @@
 | Layer | Technology | Version |
 |-------|-----------|---------|
 | Frontend | Vue 3 + Vite | Vue 3.4+, Vite 5+ |
-| Chart | Apache ECharts | 5.x |
+| State | Pinia | 2.x |
 | Backend | FastAPI | 0.110+ |
 | Database | SQLite (via SQLAlchemy) | — |
 | Scheduler | APScheduler | 3.x |
-| Data Source | TWSE OpenAPI + TPEX OpenAPI | — |
+| Data Source | TWSE OpenAPI + TPEX OpenAPI + Yahoo Finance | — |
 | Data Source | FinMind SDK | 最新 |
-| Container | Docker Compose | v2 |
+| Container | Docker (run_containers.sh) | 28+ |
 | Runtime | Python 3.11+ | — |
 
 ---
@@ -39,27 +41,28 @@
 ## Commands
 
 ```bash
-# 開發
-docker compose up -d              # 啟動所有服務
-docker compose logs -f backend    # 看後端 log
-docker compose logs -f crawler    # 看爬蟲 log
-docker compose down               # 停止
+# 開發（Docker Compose，僅 dev 環境）
+docker compose up -d
+docker compose logs -f backend
+docker compose logs -f crawler
+docker compose down
 
 # 前端獨立開發
 cd frontend && npm install
-npm run dev                       # http://localhost:8504
+npm run dev          # http://localhost:8504
 
 # 後端獨立開發
 cd backend && pip install -r requirements.txt
-uvicorn main:app --reload         # http://localhost:8000
+uvicorn main:app --reload
 
 # 測試
 cd backend && pytest -v
-cd frontend && npm run test       # Vitest
+cd frontend && npm run test   # Vitest
 
-# 建置
-cd frontend && npm run build      # 產生 dist/
-docker compose build              # 重新 build images
+# Yocto / Production 部署（無 docker-compose）
+scp deploy_pkg/*.tar.gz root@<HOST>:/root/TWSE_TOP100_HEAT/
+ssh root@<HOST> "docker load < backend.tar.gz && ..."
+bash run_containers.sh        # 啟動四個容器
 ```
 
 ---
@@ -68,140 +71,90 @@ docker compose build              # 重新 build images
 
 ```
 Twse_Top100_Heat/
-├── docker-compose.yml
+├── docker-compose.yml        # Dev 用
+├── run_containers.sh         # Yocto 生產環境用（Docker only）
 ├── AGENTS.md
-├── CONTEXT.md
-├── SPEC.md                       # 本文件
-├── frontend/                     # Vue3 + Vite + ECharts
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── HeatmapGrid.vue   # 主熱力圖格子元件
-│   │   │   ├── SectorBlock.vue   # 題材區塊元件
-│   │   │   ├── StockCell.vue     # 單一股票格子
-│   │   │   └── ModeToggle.vue    # 成交量/週轉率切換
-│   │   ├── composables/
-│   │   │   └── useStockData.js   # 資料 fetch + polling 邏輯
-│   │   ├── stores/
-│   │   │   └── stockStore.js     # Pinia store
-│   │   ├── App.vue
-│   │   └── main.js
-│   ├── vite.config.js
-│   └── package.json
-├── backend/                      # FastAPI
-│   ├── main.py
-│   ├── routers/
-│   │   ├── stocks.py             # GET /api/stocks/top100
-│   │   └── sectors.py            # GET /api/sectors, PUT /api/sectors/{id}
-│   ├── models/
-│   │   ├── stock.py
-│   │   └── sector.py
-│   ├── services/
-│   │   └── ranker.py             # 排名計算邏輯
-│   ├── database.py
-│   ├── requirements.txt
-│   └── tests/
-│       ├── test_ranker.py
-│       └── test_stocks_api.py
-├── crawler/                      # 資料爬取排程
-│   ├── main.py                   # APScheduler entry
-│   ├── sources/
-│   │   ├── twse.py               # TWSE OpenAPI client
-│   │   ├── tpex.py               # TPEX OpenAPI client
-│   │   └── finmind.py            # FinMind SDK wrapper
-│   ├── processor.py              # 合併排名、計算週轉率
-│   ├── requirements.txt
-│   └── tests/
-│       └── test_processor.py
-├── docs/
-│   ├── agents/
-│   └── adr/
+├── SPEC.md                   # 本文件
+├── improve.md                # 長期運行改善條文
+├── frontend/
+│   └── src/
+│       ├── components/
+│       │   ├── HeatmapGrid.vue      # 主格子元件（Top 360，分頁）
+│       │   ├── StockCell.vue        # 單一股票格子（含買入評分）
+│       │   ├── ModeToggle.vue       # 成交量/週轉率切換
+│       │   ├── TokenSettings.vue    # FinMind Token 設定
+│       │   └── ScoreRefreshBtn.vue  # 手動強制刷新評分
+│       ├── composables/
+│       │   ├── useStockData.js      # 盤中 60s / 盤後 5min polling
+│       │   ├── useScoreData.js      # 評分 fetch（header token）
+│       │   └── useEtfData.js        # ETF 資料
+│       └── stores/
+│           └── stockStore.js
+├── backend/
+│   ├── main.py               # CORS (ALLOWED_ORIGINS env)
+│   └── routers/
+│       ├── stocks.py         # GET /api/stocks/top100
+│       ├── sectors.py
+│       ├── etf.py
+│       └── scores.py         # GET /api/scores（header token）
+├── crawler/
+│   ├── main.py               # APScheduler：盤中/收盤/維護/月度評分
+│   ├── etf_main.py           # ETF 爬蟲 + etf_ranks 清理
+│   └── sources/
+│       ├── twse.py
+│       ├── tpex.py
+│       ├── yahoo.py          # 盤中即時報價 fallback
+│       ├── finmind.py
+│       └── buy_score.py      # 評分 fetch / write / prune
 └── Reference/
 ```
-
----
-
-## Code Style
-
-### Python (backend / crawler)
-```python
-async def get_top100_by_volume(db: Session, date: str) -> list[StockRank]:
-    """取得指定日期成交量前 100 名，依成交量降冪排序。"""
-    return (
-        db.query(StockRank)
-        .filter(StockRank.date == date)
-        .order_by(StockRank.volume.desc())
-        .limit(100)
-        .all()
-    )
-```
-
-### Vue 3 (frontend)
-```vue
-<script setup>
-const props = defineProps({
-  mode: { type: String, required: true }, // 'volume' | 'turnover'
-})
-const emit = defineEmits(['mode-change'])
-</script>
-```
-
-### 命名規範
-- DB 欄位：`snake_case`（`turnover_rate`, `price_change_pct`）
-- API endpoint：`/api/stocks/top100?mode=volume`
-- Vue component：`PascalCase`
-- JS 變數：`camelCase`
-
----
-
-## Testing Strategy
-
-| Layer | Framework | 覆蓋重點 |
-|-------|-----------|---------|
-| Backend unit | pytest | `ranker.py` 排名計算邏輯、週轉率公式 |
-| Backend API | pytest + httpx | `/api/stocks/top100` response shape |
-| Crawler unit | pytest | TWSE/TPEX/FinMind parser、processor 合併邏輯 |
-| Frontend unit | Vitest | `useStockData` composable、顏色計算函式 |
-| E2E | 手動 Chromium | 熱力圖渲染、模式切換動畫 |
-
-- Coverage 目標：backend ≥ 80%、crawler ≥ 80%
-- 每個 commit 前跑 `pytest`
 
 ---
 
 ## Data Flow
 
 ```
-每 60 秒（盤中）or 每日 16:00（收盤後）
-          │
-    ┌─────▼──────┐
-    │  crawler   │  TWSE/TPEX API → 成交量排行
-    │            │  FinMind SDK  → 股本 → 週轉率
-    └─────┬──────┘
-          │ INSERT/UPDATE
-    ┌─────▼──────┐
-    │   SQLite   │  stock_ranks + sector_map
-    └─────┬──────┘
-          │ query
-    ┌─────▼──────┐
-    │  FastAPI   │  GET /api/stocks/top100?mode=volume|turnover
-    └─────┬──────┘
-          │ HTTP polling（每 60 秒）
-    ┌─────▼──────┐
-    │   Vue 3    │  Pinia → HeatmapGrid → SectorBlock → StockCell
-    └────────────┘
+盤中（09:00–13:30）：每 60 秒
+盤後（16:00）       ：收盤最終一次
+         │
+   ┌─────▼──────┐
+   │  crawler   │  TWSE/TPEX/Yahoo → 成交量排行（Top 360 候選池）
+   │            │  FinMind SDK     → 股本 → 週轉率
+   └─────┬──────┘
+         │ UPSERT
+   ┌─────▼──────┐
+   │   SQLite   │  stock_ranks（保留 7 交易日）+ sector_map
+   │            │  etf_ranks（保留 90 交易日）
+   └─────┬──────┘
+         │ query
+   ┌─────▼──────┐
+   │  FastAPI   │  GET /api/stocks/top100?mode=volume&limit=360
+   └─────┬──────┘
+         │ HTTP polling（盤中 60s / 盤後 5min）
+   ┌─────▼──────┐
+   │   Vue 3    │  Pinia → HeatmapGrid（分頁）→ StockCell（+買入評分）
+   └────────────┘
+
+月度評分（每月 1 日 03:00）：
+   Crawler score_job
+     → GET /api/stocks/{id}/buy_score × ≤ 480 次（間隔 1.2s）
+     → 代理 StockAnalysisDashBoard（不耗本專案 FinMind token）
+     → 寫入 /app/data/buy_scores/YYYY-MM-DD.json（原子切換）
+     → 保留最近 7 天檔案
+     → 寫入 /app/data/metrics/YYYY-MM-DD.json（token 成本指標）
 ```
 
 ---
 
 ## API Contract
 
-### `GET /api/stocks/top100?mode=volume|turnover`
+### `GET /api/stocks/top100?mode=volume|turnover&limit=360`
 ```json
 {
   "mode": "volume",
-  "date": "2026-05-16",
-  "market_open": true,
-  "updated_at": "2026-05-16T10:30:00+08:00",
+  "date": "2026-05-20",
+  "market_open": false,
+  "updated_at": "2026-05-20T16:00:00+08:00",
   "sectors": [
     {
       "name": "半導體",
@@ -213,13 +166,44 @@ const emit = defineEmits(['mode-change'])
           "volume": 45000000,
           "turnover_rate": 0.82,
           "price_change_pct": 2.35,
-          "color_tier": "light_red"
+          "color_tier": "light_red",
+          "close_price": 950.0
         }
       ]
     }
   ]
 }
 ```
+
+**注意：** `rank` 欄位固定為 `volume_rank`；週轉率模式的重排在前端完成。
+
+### `GET /api/scores`
+
+Token 必須透過 **HTTP header** 傳遞，禁止放在 query string。
+
+```http
+GET /api/scores
+X-FinMind-Token: <your-token>
+```
+
+Response:
+```json
+{
+  "date": "2026-05-20",
+  "generated_at": "2026-05-20T16:15:00+08:00",
+  "scores": {
+    "2330": { "score": 18, "max_score": 24 },
+    "2317": { "score": 12, "max_score": 24 }
+  },
+  "fetching": false
+}
+```
+
+- 無資料時：`{"date": "", "scores": {}, "fetching": false}`
+- 背景抓取中：`{"date": "...", "scores": {...}, "fetching": true}`（回傳當前部分資料）
+
+Query params:
+- `force=true`：強制重新抓取（需同時提供 token header）；**不刪除舊檔**，直接原子覆寫
 
 ---
 
@@ -244,13 +228,14 @@ CREATE TABLE stock_ranks (
     name TEXT NOT NULL,
     date TEXT NOT NULL,
     volume INTEGER,
+    close_price REAL,
     turnover_rate REAL,
     price_change_pct REAL,
     color_tier TEXT,
     volume_rank INTEGER,
     turnover_rank INTEGER,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(stock_id, date)
+    -- 保留最近 7 交易日（daily_maintenance_job 清除）
 );
 
 CREATE TABLE sector_map (
@@ -258,117 +243,206 @@ CREATE TABLE sector_map (
     stock_id TEXT NOT NULL UNIQUE,
     sector TEXT NOT NULL DEFAULT '其他'
 );
+
+-- etf_ranks 保留最近 ETF_KEEP_DAYS（預設 90）交易日
+-- 每月 1 日 02:30 由 etf_main prune_old_etf_ranks() 清除
 ```
+
+---
+
+## Scheduler Jobs（crawler/main.py）
+
+| Job ID | 觸發 | 說明 |
+|--------|------|------|
+| `crawl_intraday` | Mon-Fri 09:00–12:59 每分鐘 | 盤中股票資料 |
+| `crawl_intraday_1330` | Mon-Fri 13:00–13:30 每分鐘 | 盤中延伸 |
+| `crawl_close` | Mon-Fri 16:00 | 收盤最終資料 |
+| `daily_maintenance` | Mon-Fri 08:55 | WAL checkpoint、儲存水位檢查、cache 清除、stock_ranks 修剪 |
+| `score_monthly` | 每月 1 日 03:00 | 買入評分批次（misfire 補跑 24h） |
+| `monthly_vacuum` | 每月 1 日 02:00 | SQLite VACUUM |
+
+ETF Crawler（crawler/etf_main.py）另有獨立 scheduler：
+- `etf_intraday` / `etf_intraday_1330` / `etf_close` / `etf_asset_scale` / `etf_prune`（月度清理）
+
+---
+
+## Feature: 買入評分 (Buy Score)
+
+### 決策紀錄
+
+| 問題 | 決策 | 原因 |
+|------|------|------|
+| 資料來源 | 代理 StockAnalysisDashBoard API | 評分邏輯已實作，不重複建置 |
+| 儲存方式 | JSON 檔案 `data/buy_scores/YYYY-MM-DD.json` | 不動 DB schema；原子切換（.tmp → rename） |
+| 計算時機 | **每月 1 日 03:00**（月更新） | 財報基礎分數；月更新即足夠 |
+| 候選池 | volume_rank ≤ `SCORE_CANDIDATE_LIMIT`（預設 480，硬上限 1000） | 可配置，防止無限擴張消耗 token |
+| Token 傳遞 | **X-FinMind-Token HTTP header**（禁止 query string） | 防止 token 出現在 URL / log |
+| 強制刷新 | 先產生新快取，再原子切換，**禁止先刪舊檔** | 保證舊資料在新資料完成前持續可用 |
+| 限速重試 | 指數退避：base_wait × 2^(retry-1)，上限 2 小時 | 避免全量重跑放大消耗 |
+| 部分進度 | 每 50 筆寫一次磁碟（原子切換）；中斷可續傳 | 不需從零開始 |
+| 評分顯示 | `股票名稱 - score/max_score`（如 `台積電 - 18/24`） | 最精簡，卡片空間有限 |
+| 無資料顯示 | `N/A` | 財報不完整或 API 失敗 |
+| 盤中顯示 | 顯示最新可用 JSON（今天 > 昨天 > 最近 7 天） | 不延誤頁面載入 |
+| ETF 頁面 | 不顯示 | ETF 無個股財報，評分無意義 |
+
+### Token 成本指標
+
+每次評分批次完成後寫入 `/app/data/metrics/YYYY-MM-DD.json`：
+```json
+{
+  "date": "2026-05-20",
+  "attempted": 480,
+  "succeeded": 463,
+  "failed": 17,
+  "retries": 0,
+  "coverage": 0.965,
+  "elapsed_s": 612.3
+}
+```
+
+### Success Criteria（買入評分）
+- [ ] 每月 1 日後，`data/buy_scores/YYYY-MM-DD.json` 包含 ≥ 50 支分數
+- [ ] `GET /api/scores` 回傳正確 JSON schema
+- [ ] Token 僅透過 `X-FinMind-Token` header 傳遞（測試強制驗證）
+- [ ] 強制刷新不刪除舊檔（`.tmp → rename` 原子切換）
+- [ ] 指數退避：連續 5 次非 200 → 等待 → 只重試未完成股票
+- [ ] 中斷後重跑可跳過已完成股票（部分進度持久化）
+- [ ] 每次批次寫出 metrics JSON
+- [ ] 所有 pytest 與 vitest 測試通過
+
+---
+
+## Feature: eMMC 365×24 長期穩定性
+
+### 儲存水位保護
+
+| 使用率 | 動作 |
+|--------|------|
+| ≥ 70% | `WARNING` log 告警 |
+| ≥ 80% | `WARNING` 保護模式告警 |
+| ≥ 90% | `ERROR` 緊急模式告警 |
+
+由 `daily_maintenance_job`（每日 08:55）與容器啟動時觸發。
+
+### 資料保留策略
+
+| 資料 | 預設保留 | 環境變數 |
+|------|---------|---------|
+| `stock_ranks` | 7 交易日 | — |
+| `etf_ranks` | 90 交易日 | `ETF_KEEP_DAYS` |
+| `buy_scores/*.json` | 7 天 | — |
+| `metrics/*.json` | 永久 | — |
+
+### 日誌 Rotation
+
+所有容器啟用 `json-file` driver，`max-size: 10m, max-file: 3`。
+
+### WAL / VACUUM
+
+- WAL checkpoint：每日 08:55（`daily_maintenance_job`）
+- VACUUM：每月 1 日 02:00（`monthly_vacuum`），在評分批次前執行
+
+---
+
+## Deployment
+
+### 開發（Docker Compose）
+
+```bash
+docker compose up -d
+```
+
+### Yocto / 生產（Docker only）
+
+```bash
+# 本機 build 並 SCP
+docker build -t twse_top100_heat-backend:latest ./backend
+docker save ... | gzip > backend.tar.gz
+scp *.tar.gz root@<HOST>:/root/TWSE_TOP100_HEAT/
+
+# 在 Yocto 機器上（或直接 SSH build）
+docker load < backend.tar.gz
+bash run_containers.sh
+```
+
+`run_containers.sh` 以 `--network host` 啟動四個容器，並注入所有 env vars。
+
+### 環境變數
+
+| 變數 | 預設 | 說明 |
+|------|------|------|
+| `FINMIND_TOKEN` | `""` | FinMind token（傳入 crawler） |
+| `STOCK_ANALYSIS_URL` | `http://localhost:8502` | StockAnalysisDashBoard URL |
+| `SCORES_DIR` | `/app/data/buy_scores` | 評分 JSON 目錄 |
+| `METRICS_DIR` | `/app/data/metrics` | 成本指標目錄 |
+| `SCORE_CANDIDATE_LIMIT` | `480` | 評分候選池上限（硬上限 1000） |
+| `ALLOWED_ORIGINS` | `""` (等同 `*`) | CORS 白名單，逗號分隔 |
+| `ETF_KEEP_DAYS` | `90` | ETF 歷史保留天數 |
+| `STORAGE_WARN_PCT` | `70.0` | 儲存告警閾值 (%) |
+| `STORAGE_PROTECT_PCT` | `80.0` | 儲存保護閾值 (%) |
+| `STORAGE_EMERGENCY_PCT` | `90.0` | 儲存緊急閾值 (%) |
+
+---
+
+## Code Style
+
+### Python (backend / crawler)
+```python
+async def get_top100_by_volume(db: Session, date: str) -> list[StockRank]:
+    """取得指定日期成交量前 360 名，依成交量降冪排序。"""
+    ...
+```
+
+### Vue 3 (frontend)
+```vue
+<script setup>
+const props = defineProps({
+  mode: { type: String, required: true }, // 'volume' | 'turnover' | 'etf'
+})
+</script>
+```
+
+### 命名規範
+- DB 欄位：`snake_case`（`turnover_rate`, `price_change_pct`）
+- API endpoint：`/api/stocks/top100?mode=volume&limit=360`
+- Vue component：`PascalCase`
+- JS 變數：`camelCase`
+
+---
+
+## Testing Strategy
+
+| Layer | Framework | 覆蓋重點 |
+|-------|-----------|---------|
+| Backend unit | pytest | ranker 排名計算、週轉率公式 |
+| Backend API | pytest + httpx | `/api/stocks/top100`、`/api/scores` response shape |
+| Frontend unit | Vitest | StockCell、TokenSettings、useStockData composable |
+| E2E | 手動 Chromium | 熱力圖渲染、模式切換、評分顯示 |
+
+- Coverage 目標：backend ≥ 80%
+- 每個 commit 前跑 `pytest` + `npm run test`
 
 ---
 
 ## Boundaries
 
 - **Always:**
-  - 跑 `pytest` 通過後才 commit
+  - 跑 `pytest` + `vitest` 通過後才 commit
   - API response 維持已定義的 contract shape
-  - 爬蟲只在盤中每 60 秒及 16:00 收盤後各跑
+  - Token 只透過 `X-FinMind-Token` header 傳遞，禁止 query string
   - TWSE/TPEX API 請求加 1-3 秒隨機 delay
+  - 評分強制刷新用 `.tmp → rename` 原子切換，不先刪舊檔
 
 - **Ask first:**
   - 修改 SQLite schema
   - 新增 Python / npm 套件
-  - 更改 Docker Compose port 設定
+  - 更改 Docker port 設定
   - 新增 API endpoint
+  - 調整評分候選池上限或保留天數
 
 - **Never:**
   - 硬編碼 API key 或 token
+  - 將 token 放入 URL query string 或 log
   - 在測試中跳過失敗的 assert
-  - 高頻率全市場爬蟲（> 每分鐘一次）
-
----
-
-## Open Questions
-
-1. **FinMind token** — 是否有付費 token？股本資料每日只取一次，不跟 60 秒 polling
-2. **後台維護介面** — 是否需要 Web UI 編輯題材對照表，還是直接操作 SQLite？
-3. **爆量閃爍** — MVP 就做還是 Phase 2？
-4. **TPEX 上櫃** — MVP 是否只做上市（TWSE），上櫃之後再補？
-
----
-
-## Feature: 買入評分 (Buy Score)
-
-### 目標
-在每支股票卡片名稱旁顯示來自 StockAnalysisDashBoard 的買入評分（如 `台積電 - 18/24`），協助使用者快速判斷買入強度，不額外消耗本專案的 FinMind token。
-
-### 決策紀錄
-| 問題 | 決策 | 原因 |
-|------|------|------|
-| 資料來源 | 代理 StockAnalysisDashBoard API | 評分邏輯已實作，不重複建置；StockAnalysisDashBoard 有自己的 FinMind daily cache |
-| 儲存方式 | JSON 檔案 `data/buy_scores/YYYY-MM-DD.json` | 不動 DB schema；簡單、可檢視、易回溯 |
-| 計算時機 | 每工作日 16:05（收盤後 5 分鐘） | 一天一次，法人資料盤後才完整 |
-| 顯示格式 | `股票名稱 - score/max_score`（如 `台積電 - 18/24`） | 最精簡，卡片空間有限 |
-| 無資料處理 | 顯示 `N/A` | 財報不完整或 API 失敗的股票 |
-| 盤中顯示 | 顯示昨日分數（最新可用 JSON） | 不延誤頁面載入 |
-| ETF 頁面 | 不顯示 | ETF 無個股財報，評分無意義 |
-
-### 資料流
-
-```
-每工作日 16:05
-  Crawler (score_job)
-    → GET http://host.docker.internal:18000/api/stocks/{id}/buy_score  (100次，間隔1.2秒)
-    → StockAnalysisDashBoard 回傳 {score, max_score, ...}（當日已快取，不耗 FinMind token）
-    → 寫入 /app/data/buy_scores/YYYY-MM-DD.json
-    → 保留最近 7 天檔案
-
-Backend GET /api/scores
-  → 讀最新 JSON（今天 > 昨天 > 最近交易日）
-  → 記憶體快取（每天一份，重啟後重讀）
-  → 回傳 {date, scores: {stock_id: {score, max_score}}}
-
-Frontend (App.vue onMounted)
-  → fetchScores() 一次性呼叫 /api/scores
-  → scores 存入 Pinia store (useStockStore)
-  → HeatmapGrid 將 buyScore prop 傳給 StockCell
-  → StockCell 在名稱後顯示 " - 18/24" 或 " - N/A"
-```
-
-### 新 API Contract
-
-#### `GET /api/scores`
-```json
-{
-  "date": "2026-05-19",
-  "generated_at": "2026-05-19T16:15:00+08:00",
-  "scores": {
-    "2330": { "score": 18, "max_score": 24 },
-    "2317": { "score": 12, "max_score": 24 }
-  }
-}
-```
-- 無資料時：`{"date": "", "scores": {}}`
-- 快取：backend 記憶體快取，每日首次請求讀檔
-
-### 新增 / 修改的檔案
-
-| 檔案 | 類型 | 說明 |
-|------|------|------|
-| `crawler/sources/buy_score.py` | 新增 | fetch / write / load scores JSON |
-| `crawler/main.py` | 修改 | 16:05 新增 `score_job` |
-| `backend/routers/scores.py` | 新增 | `GET /api/scores` 端點 |
-| `backend/main.py` | 修改 | 註冊 scores router |
-| `frontend/src/composables/useScoreData.js` | 新增 | 一次性 fetch /api/scores |
-| `frontend/src/stores/stockStore.js` | 修改 | 加 `scores`、`scoresLoaded` state |
-| `frontend/src/components/HeatmapGrid.vue` | 修改 | 將 `buyScore` prop 傳給 StockCell |
-| `frontend/src/components/StockCell.vue` | 修改 | 名稱列顯示 score |
-| `frontend/src/App.vue` | 修改 | onMounted 呼叫 fetchScores() |
-| `docker-compose.yml` | 修改 | 加 `STOCK_ANALYSIS_URL`、`SCORES_DIR` env |
-| `crawler/tests/test_buy_score_source.py` | 新增 | crawler 單元測試 |
-| `backend/tests/test_scores_api.py` | 新增 | API 合約測試 |
-| `frontend/tests/StockCell.test.js` | 新增 | component 測試 |
-
-### Success Criteria（買入評分）
-- [ ] 每工作日 16:05 後，`data/buy_scores/YYYY-MM-DD.json` 存在且包含 ≥ 50 支股票分數
-- [ ] `GET /api/scores` 回傳正確 JSON schema
-- [ ] 股票卡片名稱後顯示 `- score/max_score`（分數存在時）
-- [ ] 分數不存在的股票顯示 `- N/A`
-- [ ] 分數尚未載入時卡片名稱正常顯示（無 N/A 亂跳）
-- [ ] 現有熱力圖功能（volume/turnover 排名、分頁、搜尋）無回歸
-- [ ] 所有 pytest 與 vitest 測試通過
+  - 高頻率全市場爬蟲（盤中 > 每分鐘一次）
+  - 評分任務一日執行超過 1 次（手動觸發另計）

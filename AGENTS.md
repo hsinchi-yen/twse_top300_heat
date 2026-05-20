@@ -12,4 +12,13 @@ Uses the default mattpocock/skills label vocabulary (no overrides). See `docs/ag
 
 ### Domain docs
 
-Single-context repo — one `CONTEXT.md` + `docs/adr/` at the root. See `docs/agents/domain.md`.
+Single-context repo — `CLAUDE.md` (key rules) + `SPEC.md` (full spec) + `improve.md` (long-run stability conditions) + `docs/adr/`. See `docs/agents/domain.md`.
+
+## Critical Knowledge
+
+Read `CLAUDE.md` first for key architecture decisions and rules before modifying any file.
+Key invariants:
+- Token → `X-FinMind-Token` header only, never query string
+- Score refresh → atomic `.tmp → rename`, never delete-then-write
+- Frontend always fetches `mode=volume&limit=360`; turnover re-sort is frontend-only
+- See `SPEC.md` for full API contract and environment variables

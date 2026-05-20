@@ -94,3 +94,34 @@ class TestScoresEndpointFallback:
         with patch("routers.scores._load", return_value=EMPTY_PAYLOAD):
             resp = client.get("/api/scores")
         assert resp.status_code == 200
+
+    def test_response_has_fetching_false_when_cache_exists(self):
+        with patch("routers.scores._load", return_value=SAMPLE_PAYLOAD):
+            data = client.get("/api/scores").json()
+        assert data.get("fetching") is False
+
+    def test_fetching_true_when_no_cache_and_token_provided(self):
+        with patch("routers.scores._load", return_value=EMPTY_PAYLOAD):
+            with patch("routers.scores._is_fetching", False):
+                with patch("routers.scores._background_score_fetch"):
+                    with patch("routers.scores._get_stock_ids", return_value=["2330", "2317"]):
+                        data = client.get(
+                            "/api/scores",
+                            headers={"X-FinMind-Token": "test-token"},
+                        ).json()
+        assert data.get("fetching") is True
+
+    def test_fetching_false_when_no_token_no_cache(self):
+        with patch("routers.scores._load", return_value=EMPTY_PAYLOAD):
+            with patch("routers.scores._is_fetching", False):
+                data = client.get("/api/scores").json()
+        assert data.get("fetching") is False
+
+    def test_cache_hit_ignores_token(self):
+        with patch("routers.scores._load", return_value=SAMPLE_PAYLOAD):
+            data = client.get(
+                "/api/scores",
+                headers={"X-FinMind-Token": "some-token"},
+            ).json()
+        assert data["scores"] == SAMPLE_PAYLOAD["scores"]
+        assert data.get("fetching") is False

@@ -6,11 +6,21 @@
 提供：
 
 - 嵌入式系統監控
-- 股票題材輪動熱力圖
+- 股票題材輪動熱力圖（成交量前 360，可切換週轉率視角）
 - 即時事件觀察
 - 生產資訊整合
 
-並能以 Kiosk 模式長時間穩定運行。
+並能以 Kiosk 模式 365×24 小時長時間穩定運行。
+
+## 目前狀態（2026-05）
+
+**已完成（Phase 1 + 2 核心）：**
+- 台股成交量/週轉率前 360 熱力圖（分頁、題材分組、5 段色階）
+- ETF 排行（資產規模 / 週轉率）
+- 買入評分（代理 StockAnalysisDashBoard，月度更新）
+- 盤中 Yahoo Finance fallback
+- eMMC 長期穩定：WAL checkpoint、VACUUM、儲存水位監控、Log rotation
+- Yocto ARM64 部署（`run_containers.sh`，Docker only）
 
 ---
 
