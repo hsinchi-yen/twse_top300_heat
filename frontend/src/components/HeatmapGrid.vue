@@ -17,6 +17,7 @@
           :highlighted="stock.stock_id === highlightedStockId"
           :buy-score="scores[stock.stock_id] ?? null"
           :scores-loaded="scoresLoaded"
+          :scores-fetching="scoresFetching"
         />
         <!-- 末頁補空格維持 6×6 -->
         <div
@@ -71,10 +72,10 @@ import { storeToRefs } from 'pinia'
 import { useStockStore } from '../stores/stockStore'
 import StockCell from './StockCell.vue'
 
-const MAX_STOCKS = 300
+const MAX_STOCKS = 360
 
 const store = useStockStore()
-const { sectors, loading, error, mode, gridSize, scores, scoresLoaded } = storeToRefs(store)
+const { sectors, loading, error, mode, gridSize, scores, scoresLoaded, scoresFetching } = storeToRefs(store)
 const page = ref(0)
 const searchQuery = ref('')
 const searchError = ref('')
@@ -88,7 +89,8 @@ const gridStyle = computed(() => ({
   gridTemplateRows:    `repeat(${gridSize.value}, 1fr)`,
 }))
 
-// 攤平所有 sector，加上 sector 標籤，依 rank 排序
+// 攤平所有 sector，加上 sector 標籤，依當前模式排序
+// backend 固定回 volume_rank 作為 rank 欄位；週轉率模式在前端用 turnover_rate 重排
 const allStocks = computed(() => {
   const flat = []
   for (const sector of sectors.value) {
@@ -96,9 +98,10 @@ const allStocks = computed(() => {
       flat.push({ ...stock, sector: sector.name })
     }
   }
-  return flat
-    .sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999))
-    .slice(0, MAX_STOCKS)
+  const sorted = mode.value === 'turnover'
+    ? flat.slice().sort((a, b) => (b.turnover_rate ?? 0) - (a.turnover_rate ?? 0))
+    : flat.slice().sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999))
+  return sorted.slice(0, MAX_STOCKS)
 })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(allStocks.value.length / pageSize.value)))

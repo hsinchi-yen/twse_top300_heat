@@ -18,7 +18,7 @@ router = APIRouter()
 TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 MARKET_OPEN  = time(9, 0)
 MARKET_CLOSE = time(13, 30)
-CACHE_TTL_SECONDS = float(os.getenv("ETF_CACHE_TTL_SECONDS", "60"))
+CACHE_TTL_SECONDS = float(os.getenv("ETF_CACHE_TTL_SECONDS", "3"))
 _ETF_CACHE: dict[tuple[str, str], tuple[float, dict, str]] = {}
 
 

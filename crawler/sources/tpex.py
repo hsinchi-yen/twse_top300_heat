@@ -2,8 +2,9 @@
 tpex.py — TPEX (上櫃) OpenAPI client
 
 外部行為：
-  fetch_tpex_daily() -> list[dict]
-  每筆回傳 {stock_id, name, volume, price_change_pct}
+  fetch_tpex_daily() -> tuple[list[dict], str | None]
+  每筆回傳 {stock_id, name, volume, price_change_pct}；
+  第二項為 ISO 交易日期字串（如 "2026-05-18"），無法解析時為 None。
 
 防護策略：同 twse.py（UA 輪換 + retry + backoff）
 """
@@ -51,13 +52,37 @@ def _http_get(url: str, timeout: int = 15, max_retries: int = 3) -> list:
     return []
 
 
-def fetch_tpex_daily() -> list[dict]:
+def fetch_tpex_daily() -> tuple[list[dict], str | None]:
     """
     取得 TPEX 上櫃全市場當日成交資料。
-    回傳欄位: stock_id, name, volume, price_change_pct
+    回傳: (records, trading_date)
+      records: list of {stock_id, name, volume, price_change_pct}
+      trading_date: ISO date string (e.g. "2026-05-18"), or None if unavailable
     """
     raw = _http_get(TPEX_URL)
-    return _parse(raw)
+    trading_date = _extract_trading_date(raw)
+    if trading_date:
+        logger.info("TPEX trading date from API: %s", trading_date)
+    return _parse(raw), trading_date
+
+
+def _extract_trading_date(raw: list) -> str | None:
+    """
+    從 TPEX API 回應中取出交易日期。
+    TPEX Date 欄位格式: "1150518" (民國 115 年 5 月 18 日)
+    """
+    if not raw:
+        return None
+    date_raw = str(raw[0].get("Date", "")).strip().replace("/", "")
+    if len(date_raw) == 7 and date_raw.isdigit():
+        try:
+            roc_year = int(date_raw[:3])
+            month    = int(date_raw[3:5])
+            day      = int(date_raw[5:7])
+            return f"{roc_year + 1911:04d}-{month:02d}-{day:02d}"
+        except ValueError:
+            pass
+    return None
 
 
 def _parse(raw: list[dict]) -> list[dict]:

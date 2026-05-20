@@ -16,6 +16,8 @@
         <span v-if="!marketOpen" class="badge badge-closed">◼ 已收盤</span>
         <span v-else class="badge badge-open">● 盤中</span>
         <span class="last-updated mono">{{ formattedTime }}</span>
+        <ScoreRefreshBtn />
+        <TokenSettings />
       </div>
     </header>
 
@@ -36,6 +38,8 @@ import { fetchScores } from './composables/useScoreData'
 import ModeToggle from './components/ModeToggle.vue'
 import HeatmapGrid from './components/HeatmapGrid.vue'
 import EtfGrid from './components/EtfGrid.vue'
+import TokenSettings from './components/TokenSettings.vue'
+import ScoreRefreshBtn from './components/ScoreRefreshBtn.vue'
 
 const isEmbedded = import.meta.env.VITE_EMBEDDED === 'true'
 
@@ -87,6 +91,8 @@ const formattedTime = computed(() => {
   flex-shrink: 0;
   backdrop-filter: blur(8px);
   box-shadow: 0 1px 20px rgba(0, 229, 255, 0.08);
+  position: relative;
+  z-index: 200;
 }
 
 .topbar-left {

@@ -40,8 +40,9 @@ const props = defineProps({
   stock:        { type: Object,  required: true },
   mode:         { type: String,  default: 'turnover' },
   highlighted:  { type: Boolean, default: false },
-  buyScore:     { type: Object,  default: null },
-  scoresLoaded: { type: Boolean, default: false },
+  buyScore:       { type: Object,  default: null },
+  scoresLoaded:   { type: Boolean, default: false },
+  scoresFetching: { type: Boolean, default: false },
 })
 
 const cellStyle = computed(() => {
@@ -74,13 +75,18 @@ const valueLabel = computed(() => {
       : `${zhang}張`
 })
 
-// null  → scores not loaded yet (show nothing)
-// 'N/A' → loaded but no score for this stock
-// '18/24' → normal display
+// null    → never requested scores (show nothing)
+// '...'   → fetch in progress, this stock not yet scored
+// 'N/A'   → fetch complete, no score available for this stock
+// '18/24' → scored
 const scoreLabel = computed(() => {
-  if (!props.scoresLoaded) return null
+  if (!props.scoresLoaded) {
+    return props.scoresFetching ? '...' : null
+  }
   const s = props.buyScore
-  if (!s || s.score == null) return 'N/A'
+  if (!s || s.score == null) {
+    return props.scoresFetching ? '...' : 'N/A'
+  }
   return `${s.score}/${s.max_score ?? 24}`
 })
 

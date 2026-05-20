@@ -81,14 +81,31 @@ describe('StockCell — buy score display', () => {
   })
 
   describe('when scores loaded but stock has no score (buyScore = null)', () => {
-    it('shows N/A', () => {
-      const w = mountCell({ scoresLoaded: true, buyScore: null })
+    it('shows N/A when fetch is complete', () => {
+      const w = mountCell({ scoresLoaded: true, scoresFetching: false, buyScore: null })
       expect(w.find('.cell-score').text()).toContain('N/A')
     })
 
     it('shows stock name alongside N/A', () => {
-      const w = mountCell({ scoresLoaded: true, buyScore: null })
+      const w = mountCell({ scoresLoaded: true, scoresFetching: false, buyScore: null })
       expect(w.find('.cell-name-text').text()).toBe('台積電')
+    })
+  })
+
+  describe('when scores partially loaded (scoresLoaded = true, scoresFetching = true)', () => {
+    it('shows ... for stocks not yet scored', () => {
+      const w = mountCell({ scoresLoaded: true, scoresFetching: true, buyScore: null })
+      expect(w.find('.cell-score').text()).toContain('...')
+    })
+
+    it('does NOT show N/A while still fetching', () => {
+      const w = mountCell({ scoresLoaded: true, scoresFetching: true, buyScore: null })
+      expect(w.find('.cell-score').text()).not.toContain('N/A')
+    })
+
+    it('shows actual score for stocks already scored', () => {
+      const w = mountCell({ scoresLoaded: true, scoresFetching: true, buyScore: { score: 18, max_score: 24 } })
+      expect(w.find('.cell-score').text()).toContain('18/24')
     })
   })
 

@@ -3,5 +3,6 @@ FinMind==1.9.10
 tqdm
 apscheduler==3.10.4
 sqlalchemy==2.0.30
+yfinance
 pytest==8.2.0
 pytest-mock==3.14.0

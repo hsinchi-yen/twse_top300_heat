@@ -17,6 +17,7 @@ export const useStockStore = defineStore('stock', () => {
   // ── buy score state ──
   const scores = ref({})          // {stock_id: {score, max_score}}
   const scoresLoaded = ref(false)
+  const scoresFetching = ref(false)
 
   // ── ETF state ──
   const etfs = ref([])
@@ -74,6 +75,17 @@ export const useStockStore = defineStore('stock', () => {
   function setScores(payload) {
     scores.value = payload
     scoresLoaded.value = true
+    scoresFetching.value = false
+  }
+
+  // Partial update during background fetch — shows what we have, keeps fetching indicator
+  function setPartialScores(payload) {
+    scores.value = payload
+    scoresLoaded.value = true
+  }
+
+  function setScoresFetching(val) {
+    scoresFetching.value = val
   }
 
   return {
@@ -82,6 +94,6 @@ export const useStockStore = defineStore('stock', () => {
     setMode, setData, setLoading, setError,
     etfs, etfDate, etfUpdatedAt, etfLoading, etfError, etfSortBy,
     setEtfData, setEtfLoading, setEtfError, setEtfSortBy,
-    scores, scoresLoaded, setScores,
+    scores, scoresLoaded, scoresFetching, setScores, setPartialScores, setScoresFetching,
   }
 })

@@ -12,7 +12,8 @@ import { watch, onUnmounted } from 'vue'
 import { useStockStore } from '../stores/stockStore'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
-const POLL_INTERVAL_MS = 60_000
+const POLL_INTERVAL_MS = 60_000          // 盤中：每 60 秒
+const CLOSED_CHECK_INTERVAL_MS = 60_000  // 盤前/盤後：同 60 秒輕量 check（ETag 304 不耗資源）
 const MAX_BACKOFF_MS = 300_000
 const MOCK_MODE = false
 
@@ -229,14 +230,16 @@ export function useEtfData() {
         }
 
         store.setEtfData(data)
-        nextIntervalMs = POLL_INTERVAL_MS
 
-        if (!data.market_open) {
-          pollingEnabled = false
-          clearTimer()
+        if (data.market_open) {
+          // 盤中：恢復 60 秒標準輪詢
+          nextIntervalMs = POLL_INTERVAL_MS
         } else {
-          scheduleNextPoll()
+          // 盤前/收盤/假日：改用慢速 check，讓 Kiosk 能在 09:00 自動恢復
+          // ETag 使 304 Not Modified 幾乎無流量
+          nextIntervalMs = CLOSED_CHECK_INTERVAL_MS
         }
+        scheduleNextPoll()
       } catch (err) {
         if (err.name !== 'AbortError') {
           store.setEtfError(err.message)
