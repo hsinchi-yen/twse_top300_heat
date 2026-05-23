@@ -165,17 +165,23 @@ def _fetch_pass(
     scores: dict,
     headers: dict,
     today: str,
-    pass_num: int,
+    pass_num,
     total_original: int,
-) -> list:
+) -> tuple:
     """Single fetch pass over pending stock_ids.
 
-    Returns the list of stock_ids to be retried (rate-limit triggered), or []
-    when all stocks were processed without hitting the consecutive-failure threshold.
+    Returns (retry_ids, rate_limited):
+    - retry_ids: ALL failed stock_ids this pass (scattered + consecutive).
+    - rate_limited: True when 5+ consecutive failures triggered an early abort.
+
+    Previously only rate-limit-triggered stocks were returned; scattered failures
+    were silently dropped because a single success called failed_run.clear().
+    Now all_failed is never cleared, so every failure surfaces for retry.
     """
     global _cache
 
-    failed_run: list = []
+    all_failed: list = []        # every failure — never cleared
+    consecutive_fails: list = [] # consecutive streak only — cleared on success
     total = len(pending)
 
     for i, sid in enumerate(pending):
@@ -188,37 +194,41 @@ def _fetch_pass(
                     "score": data.get("score"),
                     "max_score": data.get("max_score"),
                 }
-                failed_run.clear()
+                consecutive_fails.clear()
             else:
-                failed_run.append(sid)
+                all_failed.append(sid)
+                consecutive_fails.append(sid)
         except Exception as exc:
             logger.warning("buy_score %s: %s", sid, exc)
-            failed_run.append(sid)
+            all_failed.append(sid)
+            consecutive_fails.append(sid)
 
         # Consecutive failure threshold → rate limit; abort pass early
-        if len(failed_run) >= _RATE_LIMIT_THRESHOLD:
-            retry_ids = list(failed_run) + pending[i + 1:]
+        if len(consecutive_fails) >= _RATE_LIMIT_THRESHOLD:
+            already_failed = set(all_failed)
+            remaining = [s for s in pending[i + 1:] if s not in already_failed]
+            retry_ids = all_failed + remaining
             logger.warning(
-                "buy_score pass %d: rate limit after %d stocks (%d scored). "
+                "buy_score pass %s: rate limit after %d stocks (%d scored). "
                 "Retry %d stocks after backoff.",
                 pass_num, i + 1, len(scores), len(retry_ids),
             )
             _write_partial(scores, today)
             _cache = {}
-            return retry_ids
+            return retry_ids, True
 
         if (i + 1) % BATCH_WRITE_SIZE == 0 or i == total - 1:
             _write_partial(scores, today)
             _cache = {}
             logger.info(
-                "buy_score pass %d — %d/%d processed, %d/%d scored",
+                "buy_score pass %s — %d/%d processed, %d/%d scored",
                 pass_num, i + 1, total, len(scores), total_original,
             )
 
         if i < total - 1:
             time.sleep(BACKGROUND_DELAY)
 
-    return []
+    return all_failed, False
 
 
 def _background_score_fetch(token: str, stock_ids: List[str], force: bool = False) -> None:
@@ -226,11 +236,16 @@ def _background_score_fetch(token: str, stock_ids: List[str], force: bool = Fals
 
     force=False (default): pre-loads today's existing JSON and skips already-scored
     stocks so interrupted runs resume cleanly.
-    force=True: ignores pre-existing file and fetches all stocks fresh; the new file
-    is written atomically (no manual delete of old file — §3.4).
+    force=True: starts from an empty scores dict so every stock is re-fetched fresh.
+    Failed stocks surface as absent from the JSON (frontend shows N/A) rather than
+    retaining stale scores from a previous run that may show misleading 0s.
 
     Rate-limit handling: on 5 consecutive non-200s, waits with exponential backoff
-    (base RATE_LIMIT_BASE_WAIT_S * 2^(retry-1), max 2 h) then retries pending stocks.
+    (base RATE_LIMIT_BASE_WAIT_S * 2^(retry-1), max 2 h) then retries all failed
+    stocks. Scattered individual failures (non-consecutive) are also tracked and
+    included in the retry list — they are no longer silently dropped.
+    After rate-limit retries are exhausted, any remaining individual failures get
+    one short-wait retry before being given up as N/A.
     """
     global _is_fetching, _cache
 
@@ -239,6 +254,8 @@ def _background_score_fetch(token: str, stock_ids: List[str], force: bool = Fals
     total = len(stock_ids)
     start_time = time.time()
 
+    # force=True: start fresh — failed stocks become N/A, not stale 0s from old file.
+    # force=False: resume from today's partial file so interrupted runs continue cleanly.
     scores: dict = {}
     if not force:
         today_file = SCORES_DIR / f"{today}.json"
@@ -248,7 +265,9 @@ def _background_score_fetch(token: str, stock_ids: List[str], force: bool = Fals
             except Exception:
                 pass
 
-    pending = [sid for sid in stock_ids if sid not in scores]
+    scored_before = len(scores)  # baseline: only count stocks newly scored this run
+
+    pending = stock_ids if force else [sid for sid in stock_ids if sid not in scores]
     initial_pending = len(pending)
 
     if not pending:
@@ -260,7 +279,7 @@ def _background_score_fetch(token: str, stock_ids: List[str], force: bool = Fals
 
     logger.info(
         "Background fetch: %d/%d stocks pending (pre-loaded %d, force=%s)",
-        initial_pending, total, len(scores), force,
+        initial_pending, total, scored_before, force,
     )
 
     retries_done = 0
@@ -275,9 +294,20 @@ def _background_score_fetch(token: str, stock_ids: List[str], force: bool = Fals
                 time.sleep(wait_s)
                 retries_done += 1
 
-            pending = _fetch_pass(pending, scores, headers, today, attempt, total)
+            pending, rate_limited = _fetch_pass(pending, scores, headers, today, attempt, total)
 
             if not pending:
+                break
+
+            if not rate_limited:
+                # Remaining stocks are scattered individual failures (not a rate-limit
+                # event). Give them one short-wait retry before giving up.
+                logger.info(
+                    "buy_score: %d individual failures after pass %d, retrying shortly...",
+                    len(pending), attempt,
+                )
+                time.sleep(BACKGROUND_DELAY * 3)
+                pending, _ = _fetch_pass(pending, scores, headers, today, f"{attempt}b", total)
                 break
 
         if pending:
@@ -289,12 +319,12 @@ def _background_score_fetch(token: str, stock_ids: List[str], force: bool = Fals
         logger.info("Background fetch complete: %d/%d stocks scored", len(scores), total)
     finally:
         elapsed = time.time() - start_time
-        succeeded = len(scores) - (total - initial_pending)  # newly scored this run
+        newly_scored = len(scores) - scored_before
         _write_metrics(
             today,
             attempted=initial_pending,
-            succeeded=max(succeeded, 0),
-            failed=max(initial_pending - max(succeeded, 0), 0),
+            succeeded=newly_scored,
+            failed=max(initial_pending - newly_scored, 0),
             retries=retries_done,
             elapsed_s=elapsed,
             total_stocks=total,

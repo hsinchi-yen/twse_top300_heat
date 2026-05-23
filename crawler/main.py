@@ -242,18 +242,31 @@ def vacuum_job() -> None:
 
 
 def score_job() -> None:
-    """Fetch buy scores for today's top-480 stocks by volume, writing to JSON cache.
+    """Fetch buy scores for the top-480 stocks by volume, writing to JSON cache.
 
-    Pre-loads today's existing JSON and skips already-scored stocks so an
-    interrupted run resumes from where it left off. Monthly freshness is
-    guaranteed because each calendar day writes to its own YYYY-MM-DD.json;
-    prior-month files are never re-used as today's base.
+    Queries the most recent date with actual trading data (not today) so the job
+    works correctly when run at 03:00 on the 1st — trading data for that calendar
+    day does not exist yet. Pre-loads today's existing JSON and skips already-scored
+    stocks so an interrupted run resumes from where it left off. Writes partial
+    results every 50 stocks so progress is preserved even if the job is interrupted.
     """
     now = datetime.now(tz=TZ_TAIPEI)
     today = now.strftime("%Y-%m-%d")
     logger.info("score_job started at %s", now.isoformat())
 
     with Session() as session:
+        trade_date_row = session.execute(
+            text("""
+                SELECT date FROM stock_ranks
+                GROUP BY date HAVING SUM(volume) > 0
+                ORDER BY date DESC LIMIT 1
+            """)
+        ).fetchone()
+        if not trade_date_row:
+            logger.warning("score_job: no trading data in DB, skipping")
+            return
+        trade_date = trade_date_row[0]
+
         rows = session.execute(
             text("""
                 SELECT stock_id FROM stock_ranks
@@ -261,13 +274,15 @@ def score_job() -> None:
                   AND volume_rank <= :limit
                 ORDER BY volume_rank ASC
             """),
-            {"date": today, "limit": SCORE_CANDIDATE_LIMIT},
+            {"date": trade_date, "limit": SCORE_CANDIDATE_LIMIT},
         ).fetchall()
 
     all_stock_ids = [r[0] for r in rows]
     if not all_stock_ids:
-        logger.warning("score_job: no stocks in DB for %s, skipping", today)
+        logger.warning("score_job: no stocks in DB for trade_date=%s, skipping", trade_date)
         return
+
+    logger.info("score_job: using trade_date=%s, run_date=%s", trade_date, today)
 
     # Skip stocks already scored in today's JSON (handles interrupted runs)
     existing_scores = load_scores_for_date(today)
@@ -283,7 +298,16 @@ def score_job() -> None:
         "score_job: fetching %d/%d stocks (skipping %d already scored)",
         len(stock_ids), len(all_stock_ids), len(existing_scores),
     )
-    new_scores = batch_fetch_scores(stock_ids)
+
+    def _write_partial(accumulated: dict) -> None:
+        merged = {**existing_scores, **accumulated}
+        write_scores(merged, today)
+        logger.info(
+            "score_job partial write: %d/%d scored",
+            len(merged), len(all_stock_ids),
+        )
+
+    new_scores = batch_fetch_scores(stock_ids, on_batch=_write_partial)
     merged_scores = {**existing_scores, **new_scores}
     write_scores(merged_scores, today)
     logger.info("score_job done: %d/%d stocks scored", len(merged_scores), len(all_stock_ids))

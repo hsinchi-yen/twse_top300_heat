@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -53,8 +54,16 @@ def fetch_buy_score(stock_id: str) -> dict | None:
         return None
 
 
-def batch_fetch_scores(stock_ids: list[str]) -> dict[str, dict]:
-    """Fetch buy scores for all stocks sequentially with REQUEST_DELAY between calls."""
+def batch_fetch_scores(
+    stock_ids: list[str],
+    on_batch: Callable[[dict[str, dict]], None] | None = None,
+    batch_size: int = 50,
+) -> dict[str, dict]:
+    """Fetch buy scores for all stocks sequentially with REQUEST_DELAY between calls.
+
+    on_batch: optional callback invoked with the accumulated scores dict every
+    batch_size stocks (and at the final stock) for incremental persistence.
+    """
     if not stock_ids:
         return {}
 
@@ -65,6 +74,10 @@ def batch_fetch_scores(stock_ids: list[str]) -> dict[str, dict]:
         if result is not None:
             scores[sid] = result
         logger.info("buy_score %d/%d  ok=%d  id=%s", i + 1, total, len(scores), sid)
+
+        if on_batch is not None and ((i + 1) % batch_size == 0 or i == total - 1):
+            on_batch(scores)
+
         if i < total - 1:
             time.sleep(REQUEST_DELAY)
     return scores
@@ -79,7 +92,9 @@ def write_scores(scores: dict[str, dict], date: str) -> Path:
         "scores": scores,
     }
     path = SCORES_DIR / f"{date}.json"
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
     logger.info("Wrote buy scores: %d stocks → %s", len(scores), path)
     _prune_old(SCORES_DIR, MAX_KEEP_DAYS)
     return path
