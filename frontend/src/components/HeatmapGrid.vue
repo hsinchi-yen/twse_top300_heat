@@ -4,11 +4,19 @@
       <span class="loading-dot">▋</span> 載入中…
     </div>
     <div v-else-if="error" class="state-msg error">⚠ {{ error }}</div>
-    <div v-else-if="allStocks.length === 0" class="state-msg">暫無資料</div>
+    <div v-else-if="allStocks.length === 0" class="state-msg">
+      {{ mode === 'buy_score' && scoresFetching ? '計分中…' : '暫無資料' }}
+    </div>
 
     <template v-else>
       <!-- dynamic grid -->
-      <div class="stock-grid" :style="gridStyle" :data-size="gridSize">
+      <div
+        class="stock-grid"
+        :style="gridStyle"
+        :data-size="gridSize"
+        @pointerdown="onPointerDown"
+        @pointerup="onPointerUp"
+      >
         <StockCell
           v-for="stock in pageStocks"
           :key="stock.stock_id"
@@ -19,7 +27,7 @@
           :scores-loaded="scoresLoaded"
           :scores-fetching="scoresFetching"
         />
-        <!-- 末頁補空格維持 6×6 -->
+        <!-- 末頁補空格維持格子排列 -->
         <div
           v-for="i in emptyCount"
           :key="`empty-${i}`"
@@ -28,10 +36,13 @@
       </div>
 
       <!-- 換頁列 -->
-      <div class="pagination">
-        <button class="page-btn" :disabled="page === 0" @click="prevPage">‹ 上一頁</button>
+      <div class="pagination" :class="{ mobile: isMobile }">
+        <button class="page-btn" :disabled="page === 0" @click="prevPage">
+          {{ isMobile ? '‹' : '‹ 上一頁' }}
+        </button>
 
-        <div class="page-dots">
+        <!-- desktop: 頁碼點 -->
+        <div v-if="!isMobile" class="page-dots">
           <button
             v-for="p in totalPages"
             :key="p"
@@ -41,18 +52,33 @@
           >{{ p }}</button>
         </div>
 
+        <!-- mobile: 跳頁下拉 -->
+        <select v-else class="page-jump" :value="page" @change="onJump">
+          <option v-for="p in totalPages" :key="p" :value="p - 1">
+            第 {{ p }} / {{ totalPages }} 頁
+          </option>
+        </select>
+
         <span class="page-info">
-          第 {{ page + 1 }} / {{ totalPages }} 頁
-          &nbsp;·&nbsp;
-          排名 {{ pageStart + 1 }}–{{ pageEnd }}（共 {{ allStocks.length }} 檔 / {{ gridSize }}×{{ gridSize }}）
+          <template v-if="!isMobile">
+            第 {{ page + 1 }} / {{ totalPages }} 頁
+            &nbsp;·&nbsp;
+            排名 {{ pageStart + 1 }}–{{ pageEnd }}（共 {{ allStocks.length }} 檔 / {{ cols }}×{{ rows }}）
+          </template>
+          <template v-else>
+            {{ pageStart + 1 }}–{{ pageEnd }} / {{ allStocks.length }}
+          </template>
         </span>
 
-        <button class="page-btn" :disabled="page >= totalPages - 1" @click="nextPage">下一頁 ›</button>
+        <button class="page-btn" :disabled="page >= totalPages - 1" @click="nextPage">
+          {{ isMobile ? '›' : '下一頁 ›' }}
+        </button>
 
         <div class="search-box">
           <input
             v-model="searchQuery"
             type="text"
+            inputmode="numeric"
             placeholder="輸入股號 Enter"
             maxlength="6"
             @keydown.enter="doSearch"
@@ -70,28 +96,65 @@
 import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useStockStore } from '../stores/stockStore'
+import { useBreakpoint } from '../composables/useBreakpoint'
+import { MAX_STOCKS, MOBILE_DENSITY } from '../constants'
 import StockCell from './StockCell.vue'
 
-const MAX_STOCKS = 360
-
 const store = useStockStore()
-const { sectors, loading, error, mode, gridSize, scores, scoresLoaded, scoresFetching } = storeToRefs(store)
+const {
+  sectors, loading, error, mode, gridSize, mobileDensity,
+  scores, scoresLoaded, scoresFetching,
+} = storeToRefs(store)
+const { isMobile } = useBreakpoint()
+
 const page = ref(0)
 const searchQuery = ref('')
 const searchError = ref('')
 const highlightedStockId = ref('')
 let highlightTimer = null
 
-const pageSize = computed(() => gridSize.value * gridSize.value)
+// ── grid geometry: desktop uses gridSize²; mobile uses 2×N density ──
+const cols = computed(() => isMobile.value ? MOBILE_DENSITY[mobileDensity.value].cols : gridSize.value)
+const rows = computed(() => isMobile.value ? MOBILE_DENSITY[mobileDensity.value].rows : gridSize.value)
+const pageSize = computed(() => cols.value * rows.value)
 
 const gridStyle = computed(() => ({
-  gridTemplateColumns: `repeat(${gridSize.value}, 1fr)`,
-  gridTemplateRows:    `repeat(${gridSize.value}, 1fr)`,
+  gridTemplateColumns: `repeat(${cols.value}, 1fr)`,
+  gridTemplateRows:    `repeat(${rows.value}, 1fr)`,
 }))
 
-// 攤平所有 sector，加上 sector 標籤，依當前模式排序
-// backend 固定回 volume_rank 作為 rank 欄位；週轉率模式在前端用 turnover_rate 重排
+// stock_id → enriched stock (price/change for heat color), built from display pool
+const stockLookup = computed(() => {
+  const m = {}
+  for (const sector of sectors.value) {
+    for (const s of sector.stocks ?? []) {
+      m[s.stock_id] = { ...s, sector: sector.name }
+    }
+  }
+  return m
+})
+
+// 攤平所有 sector，依當前模式排序
+// volume: backend volume_rank；turnover: 前端用 turnover_rate 重排；buy_score: 分數高→低
 const allStocks = computed(() => {
+  if (mode.value === 'buy_score') {
+    const flat = []
+    for (const sector of sectors.value) {
+      for (const s of sector.stocks ?? []) {
+        const sc = scores.value[s.stock_id]
+        flat.push({ ...s, sector: sector.name,
+          score: sc?.score ?? null, max_score: sc?.max_score ?? null })
+      }
+    }
+    flat.sort((a, b) => {
+      if (a.score === null && b.score === null) return 0
+      if (a.score === null) return 1
+      if (b.score === null) return -1
+      return b.score - a.score
+    })
+    return flat.slice(0, MAX_STOCKS).map((s, i) => ({ ...s, rank: i + 1 }))
+  }
+
   const flat = []
   for (const sector of sectors.value) {
     for (const stock of sector.stocks ?? []) {
@@ -112,11 +175,27 @@ const pageStocks = computed(() => allStocks.value.slice(pageStart.value, pageEnd
 const emptyCount = computed(() => pageSize.value - pageStocks.value.length)
 
 watch(allStocks, () => { page.value = 0 })
-watch(gridSize,  () => { page.value = 0 })
+watch(pageSize,  () => { page.value = 0 })
 watch(mode,      clearSearch)
 
 function prevPage() { if (page.value > 0) page.value-- }
 function nextPage() { if (page.value < totalPages.value - 1) page.value++ }
+function onJump(e)  { page.value = Number(e.target.value) }
+
+// ── swipe to change page (mobile only) ──
+let touchStartX = null
+function onPointerDown(e) {
+  if (!isMobile.value || e.pointerType === 'mouse') { touchStartX = null; return }
+  touchStartX = e.clientX
+}
+function onPointerUp(e) {
+  if (touchStartX === null) return
+  const dx = e.clientX - touchStartX
+  touchStartX = null
+  if (Math.abs(dx) < 50) return
+  if (dx < 0) nextPage()
+  else prevPage()
+}
 
 function doSearch() {
   const query = searchQuery.value.trim()
@@ -155,7 +234,7 @@ function clearSearch() {
 .stock-grid {
   flex: 1;
   display: grid;
-  /* columns/rows set via :style binding from gridSize */
+  /* columns/rows set via :style binding */
   gap: clamp(4px, 0.55vw, 8px);
   min-height: 0;
 }
@@ -244,6 +323,18 @@ function clearSearch() {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   letter-spacing: 0.03em;
   white-space: nowrap;
+}
+
+/* mobile 跳頁下拉 */
+.page-jump {
+  background: #0a1520;
+  color: #00e5ff;
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.8rem;
+  padding: 0.4rem 0.6rem;
+  min-height: 44px;
 }
 
 /* ── 搜尋框 ── */
@@ -355,6 +446,46 @@ function clearSearch() {
   .state-msg {
     font-size: 0.88rem;
     padding: 2rem;
+  }
+}
+
+/* ── 真手機斷點：觸控導向佈局 ── */
+@media (max-width: 768px) {
+  .heatmap-container { gap: 0.5rem; }
+
+  .pagination.mobile {
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 0.3rem 0;
+  }
+
+  .pagination.mobile .page-btn {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1.1rem;
+    padding: 0.3rem 0.7rem;
+  }
+
+  .pagination.mobile .page-info {
+    font-size: 0.72rem;
+    order: 4;
+    flex-basis: 100%;
+    text-align: center;
+  }
+
+  .pagination.mobile .search-box {
+    order: 5;
+    flex-basis: 100%;
+    margin-left: 0;
+    justify-content: center;
+  }
+
+  .pagination.mobile .search-input {
+    width: 100%;
+    max-width: 240px;
+    font-size: 0.85rem;
+    min-height: 40px;
+    padding: 0.4rem 1.8rem 0.4rem 0.7rem;
   }
 }
 </style>

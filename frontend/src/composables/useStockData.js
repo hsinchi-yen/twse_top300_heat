@@ -9,6 +9,7 @@
 
 import { watch, onUnmounted } from 'vue'
 import { useStockStore } from '../stores/stockStore'
+import { MAX_STOCKS } from '../constants'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 const POLL_INTERVAL_MS = 60_000          // 盤中：每 60 秒
@@ -48,7 +49,7 @@ export function useStockData() {
     const request = (async () => {
       try {
         const res = await fetch(
-          `${API_BASE}/api/stocks/top100?mode=volume&limit=360`,
+          `${API_BASE}/api/stocks/top100?mode=volume&limit=${MAX_STOCKS}`,
           { signal: abortController.signal }
         )
         if (!res.ok) throw new Error(`HTTP ${res.status}`)

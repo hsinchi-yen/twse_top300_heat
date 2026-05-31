@@ -2,11 +2,11 @@
 
 ## What This Project Is
 
-台股成交量前 360 熱力圖 Dashboard。Vue 3 + FastAPI + SQLite + APScheduler，部署於 Yocto ARM64 嵌入式 Linux，連續運行 365×24 小時。
+台股成交量前 480 熱力圖 Dashboard。Vue 3 + FastAPI + SQLite + APScheduler，部署於 Yocto ARM64 嵌入式 Linux，連續運行 365×24 小時。
 
 ## Key Architecture Decisions
 
-- **Display pool**: 360 stocks by volume (`mode=volume&limit=360` always)；週轉率模式在前端重排，不動後端 query
+- **Display pool**: 480 stocks by volume (`mode=volume&limit=480` via `MAX_STOCKS` constant)；週轉率模式在前端重排，不動後端 query
 - **Score candidate pool**: `volume_rank ≤ SCORE_CANDIDATE_LIMIT`（預設 480，硬上限 1000）
 - **Score schedule**: 每月 1 日 03:00（月更新，財報基礎分數）
 - **Token**: 只能透過 `X-FinMind-Token` HTTP header 傳遞，禁止放入 query string 或 log
@@ -21,14 +21,14 @@
 cd backend && pytest -v           # 期望 60/60 pass
 
 # Frontend（必須在 commit 前通過）
-cd frontend && npm run test       # 期望 41/41 pass
+cd frontend && npm run test       # 期望 56/56 pass
 ```
 
 ## Critical Rules
 
 1. Token 只透過 `X-FinMind-Token` header，禁止 query string
 2. 評分強制刷新不刪舊檔 — 用 `.tmp` 寫完後 `.replace()`
-3. 前端 `useStockData.js` 永遠用 `mode=volume&limit=360`；週轉率排序在 `HeatmapGrid.vue` allStocks computed 做
+3. 前端 `useStockData.js` 永遠用 `mode=volume&limit=480`（由 `constants.js::MAX_STOCKS` 控制）；週轉率排序在 `HeatmapGrid.vue` allStocks computed 做
 4. `CORS` 從 `ALLOWED_ORIGINS` env 讀取；不得寫死 `["*"]`
 5. 每次 API contract 變更先改 `SPEC.md`，再補測試，再改實作
 
