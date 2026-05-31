@@ -8,7 +8,13 @@
 
     <template v-else>
       <!-- dynamic ETF grid -->
-      <div class="etf-grid" :style="gridStyle" :data-size="gridSize">
+      <div
+        class="etf-grid"
+        :style="gridStyle"
+        :data-size="gridSize"
+        @pointerdown="onPointerDown"
+        @pointerup="onPointerUp"
+      >
         <EtfCell
           v-for="(etf, idx) in pageEtfs"
           :key="etf.etf_id"
@@ -40,10 +46,13 @@
       </div>
 
       <!-- 換頁列 + 排序切換 -->
-      <div class="pagination">
-        <button class="page-btn" :disabled="page === 0" @click="prevPage">‹ 上一頁</button>
+      <div class="pagination" :class="{ mobile: isMobile }">
+        <button class="page-btn" :disabled="page === 0" @click="prevPage">
+          {{ isMobile ? '‹' : '‹ 上一頁' }}
+        </button>
 
-        <div class="page-dots">
+        <!-- desktop: 頁碼點 -->
+        <div v-if="!isMobile" class="page-dots">
           <button
             v-for="p in totalPages"
             :key="p"
@@ -53,13 +62,25 @@
           >{{ p }}</button>
         </div>
 
+        <!-- mobile: 跳頁下拉 -->
+        <select v-else class="page-jump" :value="page" @change="onJump">
+          <option v-for="p in totalPages" :key="p" :value="p - 1">
+            第 {{ p }} / {{ totalPages }} 頁
+          </option>
+        </select>
+
         <span class="page-info">
-          第 {{ page + 1 }} / {{ totalPages }} 頁
-          &nbsp;·&nbsp;
-          排名 {{ pageStart + 1 }}–{{ pageEnd }}（共 {{ filteredEtfs.length }} 檔 / {{ gridSize }}×{{ gridSize }}）
+          <template v-if="!isMobile">
+            第 {{ page + 1 }} / {{ totalPages }} 頁
+            &nbsp;·&nbsp;
+            排名 {{ pageStart + 1 }}–{{ pageEnd }}（共 {{ filteredEtfs.length }} 檔 / {{ cols }}×{{ rows }}）
+          </template>
+          <template v-else>
+            {{ pageStart + 1 }}–{{ pageEnd }} / {{ filteredEtfs.length }}
+          </template>
         </span>
 
-        <!-- 排序切換 + 週轉率說明 -->
+        <!-- 排序切換 + 週轉率說明（手機隱藏說明） -->
         <div class="sort-toggle">
           <button
             class="sort-btn"
@@ -73,7 +94,7 @@
           >資產規模</button>
         </div>
 
-        <div class="turnover-info">
+        <div v-if="!isMobile" class="turnover-info">
           <span class="info-trigger">成交量/持股週轉率 ⓘ</span>
           <div class="info-popover">
             <p class="info-row"><span class="info-label">成交量週轉率</span>關心這檔 ETF 好不好買賣、熱不熱門，應參考此指標。</p>
@@ -81,7 +102,9 @@
           </div>
         </div>
 
-        <button class="page-btn" :disabled="page >= totalPages - 1" @click="nextPage">下一頁 ›</button>
+        <button class="page-btn" :disabled="page >= totalPages - 1" @click="nextPage">
+          {{ isMobile ? '›' : '下一頁 ›' }}
+        </button>
       </div>
     </template>
   </div>
@@ -91,19 +114,25 @@
 import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useStockStore } from '../stores/stockStore'
+import { useBreakpoint } from '../composables/useBreakpoint'
+import { MOBILE_DENSITY } from '../constants'
 import EtfCell from './EtfCell.vue'
 
 const store = useStockStore()
-const { etfs, etfLoading, etfError, etfSortBy, gridSize } = storeToRefs(store)
+const { etfs, etfLoading, etfError, etfSortBy, gridSize, mobileDensity } = storeToRefs(store)
+const { isMobile } = useBreakpoint()
 
 const page = ref(0)
 const selectedTypes = ref(new Set())
 
-const pageSize = computed(() => gridSize.value * gridSize.value)
+// ── grid geometry: desktop uses gridSize²; mobile uses 2×N density ──
+const cols = computed(() => isMobile.value ? MOBILE_DENSITY[mobileDensity.value].cols : gridSize.value)
+const rows = computed(() => isMobile.value ? MOBILE_DENSITY[mobileDensity.value].rows : gridSize.value)
+const pageSize = computed(() => cols.value * rows.value)
 
 const gridStyle = computed(() => ({
-  gridTemplateColumns: `repeat(${gridSize.value}, 1fr)`,
-  gridTemplateRows:    `repeat(${gridSize.value}, 1fr)`,
+  gridTemplateColumns: `repeat(${cols.value}, 1fr)`,
+  gridTemplateRows:    `repeat(${rows.value}, 1fr)`,
 }))
 
 const sortedEtfs = computed(() => {
@@ -139,12 +168,28 @@ const pageEnd    = computed(() => Math.min(pageStart.value + pageSize.value, fil
 const pageEtfs   = computed(() => filteredEtfs.value.slice(pageStart.value, pageEnd.value))
 const emptyCount = computed(() => pageSize.value - pageEtfs.value.length)
 
-watch(etfs,     () => { page.value = 0 })
-watch(etfSortBy,() => { page.value = 0 })
-watch(gridSize, () => { page.value = 0 })
+watch(etfs,      () => { page.value = 0 })
+watch(etfSortBy, () => { page.value = 0 })
+watch(pageSize,  () => { page.value = 0 })
 
 function prevPage() { if (page.value > 0) page.value-- }
 function nextPage() { if (page.value < totalPages.value - 1) page.value++ }
+function onJump(e)  { page.value = Number(e.target.value) }
+
+// ── swipe to change page (mobile only) ──
+let touchStartX = null
+function onPointerDown(e) {
+  if (!isMobile.value || e.pointerType === 'mouse') { touchStartX = null; return }
+  touchStartX = e.clientX
+}
+function onPointerUp(e) {
+  if (touchStartX === null) return
+  const dx = e.clientX - touchStartX
+  touchStartX = null
+  if (Math.abs(dx) < 50) return
+  if (dx < 0) nextPage()
+  else prevPage()
+}
 
 function setSortBy(val) {
   store.setEtfSortBy(val)
@@ -290,6 +335,18 @@ function clearFilter() {
   box-shadow: 0 0 8px rgba(255, 179, 0, 0.4);
 }
 
+/* mobile 跳頁下拉 */
+.page-jump {
+  background: #120c00;
+  color: #ffb300;
+  border: 1px solid rgba(255, 179, 0, 0.3);
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.8rem;
+  padding: 0.4rem 0.6rem;
+  min-height: 44px;
+}
+
 .page-info {
   font-size: 0.72rem;
   color: #554400;
@@ -409,5 +466,58 @@ function clearFilter() {
   .info-popover { width: 240px; font-size: 0.62rem; }
   .state-msg { font-size: 0.88rem; padding: 2rem; }
   .type-chip { font-size: 0.56rem; padding: 1px 5px; }
+}
+
+/* ── 真手機斷點：觸控導向佈局 ── */
+@media (max-width: 768px) {
+  .etf-container { gap: 0.4rem; }
+
+  /* 篩選列橫向捲動，不換行 */
+  .type-filter {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 0.15rem 0;
+    gap: 5px;
+  }
+  .type-filter::-webkit-scrollbar { display: none; }
+  .type-chip {
+    flex-shrink: 0;
+    font-size: 0.65rem;
+    padding: 3px 8px;
+    min-height: 32px;
+  }
+
+  .pagination.mobile {
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 0.3rem 0;
+    justify-content: center;
+  }
+
+  .pagination.mobile .page-btn {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1.1rem;
+    padding: 0.3rem 0.7rem;
+  }
+
+  .pagination.mobile .page-info {
+    font-size: 0.72rem;
+    order: 4;
+    flex-basis: 100%;
+    text-align: center;
+    color: rgba(255, 179, 0, 0.45);
+  }
+
+  .pagination.mobile .sort-toggle {
+    order: 3;
+  }
+
+  .pagination.mobile .sort-btn {
+    font-size: 0.68rem;
+    padding: 0.2rem 0.6rem;
+    min-height: 36px;
+  }
 }
 </style>
