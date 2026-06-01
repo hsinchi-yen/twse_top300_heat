@@ -190,10 +190,9 @@ def _fetch_pass(
             resp = httpx.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
             if resp.status_code == 200:
                 data = resp.json()
-                scores[sid] = {
-                    "score": data.get("score"),
-                    "max_score": data.get("max_score"),
-                }
+                max_score = data.get("max_score")
+                if max_score:
+                    scores[sid] = {"score": data.get("score"), "max_score": max_score}
                 consecutive_fails.clear()
             else:
                 all_failed.append(sid)

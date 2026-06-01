@@ -68,7 +68,7 @@ describe('StockCell — buy score display', () => {
       expect(w.find('.cell-score').text()).toContain('-')
     })
 
-    it('handles score of zero correctly (not treated as N/A)', () => {
+    it('handles score of zero correctly (not treated as N/A when max_score is valid)', () => {
       const w = mountCell({ scoresLoaded: true, buyScore: { score: 0, max_score: 24 } })
       expect(w.find('.cell-score').text()).toContain('0/24')
       expect(w.find('.cell-score').text()).not.toContain('N/A')
@@ -77,6 +77,12 @@ describe('StockCell — buy score display', () => {
     it('handles perfect score', () => {
       const w = mountCell({ scoresLoaded: true, buyScore: { score: 24, max_score: 24 } })
       expect(w.find('.cell-score').text()).toContain('24/24')
+    })
+
+    it('shows N/A when max_score is 0 (invalid score — no analyzable criteria)', () => {
+      const w = mountCell({ scoresLoaded: true, scoresFetching: false, buyScore: { score: 0, max_score: 0 } })
+      expect(w.find('.cell-score').text()).toContain('N/A')
+      expect(w.find('.cell-score').text()).not.toContain('0/0')
     })
   })
 

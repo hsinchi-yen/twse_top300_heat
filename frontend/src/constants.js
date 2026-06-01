@@ -5,5 +5,6 @@ export const MAX_STOCKS = 480
 export const MOBILE_DENSITY = {
   '2x2': { cols: 2, rows: 2 },
   '2x3': { cols: 2, rows: 3 },
+  '3x3': { cols: 3, rows: 3 },
 }
 export const DEFAULT_MOBILE_DENSITY = '2x3'

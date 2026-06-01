@@ -25,9 +25,15 @@ describe('stockStore — mobileDensity', () => {
     expect(localStorage.getItem('mobile_density')).toBe('2x2')
   })
 
-  it('ignores unknown density values', () => {
+  it('accepts 3x3 density', () => {
     const store = useStockStore()
     store.setMobileDensity('3x3')
+    expect(store.mobileDensity).toBe('3x3')
+  })
+
+  it('ignores unknown density values', () => {
+    const store = useStockStore()
+    store.setMobileDensity('4x4')
     expect(store.mobileDensity).toBe('2x3')
   })
 })

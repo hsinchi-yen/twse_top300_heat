@@ -46,7 +46,7 @@
     <!-- 密度切換（手機）-->
     <div v-else class="density-group" title="每頁卡片數">
       <button
-        v-for="d in ['2x2', '2x3']"
+        v-for="d in ['2x2', '2x3', '3x3']"
         :key="d"
         :class="['size-btn', mobileDensity === d ? 'active' : '']"
         @click="emit('density-change', d)"

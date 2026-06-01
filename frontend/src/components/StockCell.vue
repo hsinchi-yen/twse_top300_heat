@@ -84,7 +84,7 @@ const scoreLabel = computed(() => {
     return props.scoresFetching ? '...' : null
   }
   const s = props.buyScore
-  if (!s || s.score == null) {
+  if (!s || s.score == null || s.max_score === 0) {
     return props.scoresFetching ? '...' : 'N/A'
   }
   return `${s.score}/${s.max_score ?? 24}`

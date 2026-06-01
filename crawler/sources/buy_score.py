@@ -43,10 +43,11 @@ def fetch_buy_score(stock_id: str) -> dict | None:
         resp = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         if resp.status_code == 200:
             data = resp.json()
-            return {
-                "score": data.get("score"),
-                "max_score": data.get("max_score"),
-            }
+            max_score = data.get("max_score")
+            if not max_score:
+                logger.info("buy_score %s: max_score=%s, no analyzable criteria", stock_id, max_score)
+                return None
+            return {"score": data.get("score"), "max_score": max_score}
         logger.warning("buy_score %s: HTTP %d", stock_id, resp.status_code)
         return None
     except Exception as exc:
