@@ -14,7 +14,7 @@
         class="stock-grid"
         :style="gridStyle"
         :data-size="gridSize"
-        :data-density="isMobile ? mobileDensity : null"
+        :data-density="isMobile ? mobileDensity : (isTablet ? tabletDensity : null)"
         @pointerdown="onPointerDown"
         @pointerup="onPointerUp"
       >
@@ -42,7 +42,7 @@
           {{ isMobile ? '‹' : '‹ 上一頁' }}
         </button>
 
-        <!-- desktop: 頁碼點 -->
+        <!-- desktop/tablet: 頁碼點 -->
         <div v-if="!isMobile" class="page-dots">
           <button
             v-for="p in totalPages"
@@ -98,15 +98,15 @@ import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useStockStore } from '../stores/stockStore'
 import { useBreakpoint } from '../composables/useBreakpoint'
-import { MAX_STOCKS, MOBILE_DENSITY } from '../constants'
+import { MAX_STOCKS, MOBILE_DENSITY, TABLET_DENSITY } from '../constants'
 import StockCell from './StockCell.vue'
 
 const store = useStockStore()
 const {
-  sectors, loading, error, mode, gridSize, mobileDensity,
+  sectors, loading, error, mode, gridSize, mobileDensity, tabletDensity,
   scores, scoresLoaded, scoresFetching,
 } = storeToRefs(store)
-const { isMobile } = useBreakpoint()
+const { isMobile, isTablet } = useBreakpoint()
 
 const page = ref(0)
 const searchQuery = ref('')
@@ -114,9 +114,17 @@ const searchError = ref('')
 const highlightedStockId = ref('')
 let highlightTimer = null
 
-// ── grid geometry: desktop uses gridSize²; mobile uses 2×N density ──
-const cols = computed(() => isMobile.value ? MOBILE_DENSITY[mobileDensity.value].cols : gridSize.value)
-const rows = computed(() => isMobile.value ? MOBILE_DENSITY[mobileDensity.value].rows : gridSize.value)
+// ── grid geometry ──
+const cols = computed(() => {
+  if (isMobile.value)  return MOBILE_DENSITY[mobileDensity.value].cols
+  if (isTablet.value)  return TABLET_DENSITY[tabletDensity.value].cols
+  return gridSize.value
+})
+const rows = computed(() => {
+  if (isMobile.value)  return MOBILE_DENSITY[mobileDensity.value].rows
+  if (isTablet.value)  return TABLET_DENSITY[tabletDensity.value].rows
+  return gridSize.value
+})
 const pageSize = computed(() => cols.value * rows.value)
 
 const gridStyle = computed(() => ({
@@ -124,7 +132,6 @@ const gridStyle = computed(() => ({
   gridTemplateRows:    `repeat(${rows.value}, 1fr)`,
 }))
 
-// stock_id → enriched stock (price/change for heat color), built from display pool
 const stockLookup = computed(() => {
   const m = {}
   for (const sector of sectors.value) {
@@ -135,8 +142,6 @@ const stockLookup = computed(() => {
   return m
 })
 
-// 攤平所有 sector，依當前模式排序
-// volume: backend volume_rank；turnover: 前端用 turnover_rate 重排；buy_score: 分數高→低
 const allStocks = computed(() => {
   if (mode.value === 'buy_score') {
     const flat = []
@@ -183,7 +188,6 @@ function prevPage() { if (page.value > 0) page.value-- }
 function nextPage() { if (page.value < totalPages.value - 1) page.value++ }
 function onJump(e)  { page.value = Number(e.target.value) }
 
-// ── swipe to change page (mobile only) ──
 let touchStartX = null
 function onPointerDown(e) {
   if (!isMobile.value || e.pointerType === 'mouse') { touchStartX = null; return }
@@ -235,18 +239,16 @@ function clearSearch() {
 .stock-grid {
   flex: 1;
   display: grid;
-  /* columns/rows set via :style binding */
   gap: clamp(4px, 0.55vw, 8px);
   min-height: 0;
 }
 
-/* 4×4：卡片大，gap 稍寬；字體在 StockCell 用 clamp 自動放大 */
 .stock-grid[data-size="4"] { gap: clamp(6px, 0.7vw, 12px); }
 .stock-grid[data-size="5"] { gap: clamp(5px, 0.6vw, 10px); }
 
 .cell-empty {
-  background: rgba(0, 255, 255, 0.02);
-  border: 1px dashed rgba(0, 255, 255, 0.08);
+  background: var(--cell-empty-bg);
+  border: 1px dashed var(--cell-empty-border);
   border-radius: 6px;
 }
 
@@ -261,9 +263,9 @@ function clearSearch() {
 }
 
 .page-btn {
-  background: rgba(0, 255, 255, 0.05);
-  color: #00e5ff;
-  border: 1px solid rgba(0, 255, 255, 0.3);
+  background: var(--ctrl-page-btn-bg);
+  color: var(--ctrl-page-btn-color);
+  border: 1px solid var(--ctrl-page-btn-border);
   border-radius: 4px;
   padding: 0.3rem 0.9rem;
   font-size: 0.78rem;
@@ -274,9 +276,9 @@ function clearSearch() {
 }
 
 .page-btn:hover:not(:disabled) {
-  background: rgba(0, 255, 255, 0.15);
-  border-color: #00e5ff;
-  box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
+  background: var(--ctrl-page-btn-hover-bg);
+  border-color: var(--ctrl-page-btn-color);
+  box-shadow: 0 0 8px var(--ctrl-page-btn-hover-shadow);
 }
 
 .page-btn:disabled {
@@ -293,9 +295,9 @@ function clearSearch() {
   width: 26px;
   height: 26px;
   border-radius: 3px;
-  background: rgba(0, 255, 255, 0.05);
-  border: 1px solid rgba(0, 255, 255, 0.2);
-  color: #555;
+  background: var(--ctrl-dot-bg);
+  border: 1px solid var(--ctrl-dot-border);
+  color: var(--ctrl-dot-color);
   font-size: 0.72rem;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   cursor: pointer;
@@ -306,31 +308,30 @@ function clearSearch() {
 }
 
 .dot:hover {
-  background: rgba(0, 255, 255, 0.12);
-  color: #00e5ff;
+  background: var(--ctrl-dot-hover-bg);
+  color: var(--ctrl-dot-hover-color);
 }
 
 .dot.active {
-  background: rgba(0, 229, 255, 0.15);
-  border-color: #00e5ff;
-  color: #00e5ff;
+  background: var(--ctrl-dot-active-bg);
+  border-color: var(--ctrl-dot-active-border);
+  color: var(--ctrl-dot-active-color);
   font-weight: 700;
-  box-shadow: 0 0 8px rgba(0, 229, 255, 0.4);
+  box-shadow: 0 0 8px var(--ctrl-dot-active-shadow);
 }
 
 .page-info {
   font-size: 0.72rem;
-  color: #444;
+  color: var(--ctrl-page-info-color);
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   letter-spacing: 0.03em;
   white-space: nowrap;
 }
 
-/* mobile 跳頁下拉 */
 .page-jump {
-  background: #0a1520;
-  color: #00e5ff;
-  border: 1px solid rgba(0, 229, 255, 0.3);
+  background: var(--ctrl-jump-bg);
+  color: var(--ctrl-jump-color);
+  border: 1px solid var(--ctrl-jump-border);
   border-radius: 4px;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 0.8rem;
@@ -347,10 +348,10 @@ function clearSearch() {
 }
 
 .search-input {
-  background: #0a1520;
-  border: 1px solid rgba(0, 229, 255, 0.25);
+  background: var(--ctrl-search-bg);
+  border: 1px solid var(--ctrl-search-border);
   border-radius: 4px;
-  color: #a0d2f0;
+  color: var(--ctrl-search-color);
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 0.78rem;
   padding: 0.28rem 1.8rem 0.28rem 0.6rem;
@@ -361,13 +362,13 @@ function clearSearch() {
 }
 
 .search-input::placeholder {
-  color: rgba(0, 229, 255, 0.25);
+  color: var(--ctrl-search-placeholder);
   font-size: 0.7rem;
 }
 
 .search-input:focus {
-  border-color: #00e5ff;
-  box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
+  border-color: var(--ctrl-search-focus-border);
+  box-shadow: 0 0 8px var(--ctrl-search-focus-shadow);
 }
 
 .search-clear {
@@ -375,7 +376,7 @@ function clearSearch() {
   right: 5px;
   background: none;
   border: none;
-  color: rgba(0, 229, 255, 0.4);
+  color: color-mix(in srgb, var(--accent) 40%, transparent);
   font-size: 1rem;
   cursor: pointer;
   padding: 0 3px;
@@ -383,7 +384,7 @@ function clearSearch() {
   transition: color 0.15s;
 }
 
-.search-clear:hover { color: #00e5ff; }
+.search-clear:hover { color: var(--accent); }
 
 .search-error {
   position: absolute;
@@ -391,7 +392,7 @@ function clearSearch() {
   left: 0;
   margin-top: 3px;
   font-size: 0.65rem;
-  color: #ff4444;
+  color: var(--ctrl-error-color);
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   white-space: nowrap;
   pointer-events: none;
@@ -400,14 +401,14 @@ function clearSearch() {
 
 /* ── 狀態訊息 ── */
 .state-msg {
-  color: #444;
+  color: var(--ctrl-state-color);
   font-size: 1rem;
   text-align: center;
   padding: 4rem;
   flex: 1;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
-.state-msg.error { color: #ff4444; }
+.state-msg.error { color: var(--ctrl-error-color); }
 
 @keyframes blink {
   0%, 100% { opacity: 1; }
@@ -415,44 +416,31 @@ function clearSearch() {
 }
 .loading-dot {
   animation: blink 1s step-start infinite;
-  color: #00e5ff;
+  color: var(--ctrl-loading-dot);
 }
 
 @media (max-width: 1366px), (max-height: 768px) {
-  .pagination {
-    gap: 0.45rem;
-  }
+  .pagination { gap: 0.45rem; }
+  .page-btn   { padding: 0.2rem 0.6rem; font-size: 0.7rem; }
+  .dot        { width: 22px; height: 22px; font-size: 0.66rem; }
+  .page-info  { font-size: 0.66rem; }
+  .search-input { font-size: 0.7rem; width: 110px; padding: 0.22rem 1.6rem 0.22rem 0.5rem; }
+  .state-msg  { font-size: 0.88rem; padding: 2rem; }
+}
 
-  .page-btn {
-    padding: 0.2rem 0.6rem;
-    font-size: 0.7rem;
-  }
-
-  .dot {
-    width: 22px;
-    height: 22px;
-    font-size: 0.66rem;
-  }
-
-  .page-info {
-    font-size: 0.66rem;
-  }
-
-  .search-input {
-    font-size: 0.7rem;
-    width: 110px;
-    padding: 0.22rem 1.6rem 0.22rem 0.5rem;
-  }
-
-  .state-msg {
-    font-size: 0.88rem;
-    padding: 2rem;
-  }
+/* ── 平板（769–1024px）：中等字體，介於手機與桌機之間 ── */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .stock-grid :deep(.cell-name)   { font-size: clamp(0.85rem, 1.4vw, 1.1rem); }
+  .stock-grid :deep(.cell-code)   { font-size: clamp(0.58rem, 0.85vw, 0.72rem); }
+  .stock-grid :deep(.cell-price)  { font-size: clamp(0.65rem, 1.0vw, 0.85rem); }
+  .stock-grid :deep(.cell-rank)   { font-size: clamp(0.55rem, 0.8vw, 0.68rem); }
+  .stock-grid :deep(.cell-sector) { font-size: clamp(0.52rem, 0.75vw, 0.65rem); }
+  .stock-grid :deep(.cell-pct)    { font-size: clamp(0.75rem, 1.2vw, 1.0rem); }
 }
 
 /* ── 手機直屏：字體放大（覆蓋 StockCell 的 scoped 字體大小）── */
 
-/* 2x2 / 2x3：放大方便老花眼閱讀（字級略縮，確保 3-4 字名稱完整顯示） */
+/* 2x2 / 2x3：放大方便閱讀 */
 @media (max-width: 768px) {
   .stock-grid:not([data-density="3x3"]) :deep(.cell-rank)   { font-size: 1.16rem; }
   .stock-grid:not([data-density="3x3"]) :deep(.cell-sector) { font-size: 1.0rem;  }
@@ -476,7 +464,7 @@ function clearSearch() {
   .stock-grid[data-density="3x3"] :deep(.cell-pct)    { font-size: 1.17rem; }
 }
 
-/* 名稱完整顯示：手機改為最多兩行換行，不再單行裁切（避免第2/3字看不到） */
+/* 名稱完整顯示：手機改為最多兩行換行 */
 @media (max-width: 768px) {
   .stock-grid :deep(.cell-name) {
     flex-wrap: wrap;

@@ -30,8 +30,8 @@ defineProps({
 
 <style scoped>
 .sector-block {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--sector-bg);
+  border: 1px solid var(--sector-border);
   border-radius: 8px;
   padding: 0.55rem;
   display: flex;
@@ -51,7 +51,7 @@ defineProps({
 .sector-name {
   font-size: 0.75rem;
   font-weight: 700;
-  color: rgba(0, 229, 255, 0.75);
+  color: var(--sector-name-color);
   letter-spacing: 0.04em;
   white-space: nowrap;
   overflow: hidden;
@@ -60,7 +60,7 @@ defineProps({
 
 .sector-count {
   font-size: 0.66rem;
-  color: rgba(200, 220, 240, 0.42);
+  color: var(--sector-count-color);
   white-space: nowrap;
 }
 

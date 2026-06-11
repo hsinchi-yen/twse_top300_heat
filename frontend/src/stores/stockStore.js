@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { DEFAULT_MOBILE_DENSITY, MOBILE_DENSITY } from '../constants'
+import { DEFAULT_MOBILE_DENSITY, MOBILE_DENSITY, DEFAULT_TABLET_DENSITY, TABLET_DENSITY } from '../constants'
 
-const DENSITY_KEY = 'mobile_density'
+const DENSITY_KEY        = 'mobile_density'
+const TABLET_DENSITY_KEY = 'tablet_density'
 
 export const useStockStore = defineStore('stock', () => {
   // ── grid size (desktop) ──
@@ -11,6 +12,10 @@ export const useStockStore = defineStore('stock', () => {
   // ── mobile card density ──
   const _storedDensity = (typeof localStorage !== 'undefined' && localStorage.getItem(DENSITY_KEY)) || ''
   const mobileDensity = ref(_storedDensity in MOBILE_DENSITY ? _storedDensity : DEFAULT_MOBILE_DENSITY)
+
+  // ── tablet card density ──
+  const _storedTabletDensity = (typeof localStorage !== 'undefined' && localStorage.getItem(TABLET_DENSITY_KEY)) || ''
+  const tabletDensity = ref(_storedTabletDensity in TABLET_DENSITY ? _storedTabletDensity : DEFAULT_TABLET_DENSITY)
 
   // ── stock mode state ──
   const mode = ref('turnover')      // 'volume' | 'turnover' | 'etf' | 'buy_score'
@@ -41,6 +46,12 @@ export const useStockStore = defineStore('stock', () => {
     if (!(d in MOBILE_DENSITY)) return
     mobileDensity.value = d
     if (typeof localStorage !== 'undefined') localStorage.setItem(DENSITY_KEY, d)
+  }
+
+  function setTabletDensity(d) {
+    if (!(d in TABLET_DENSITY)) return
+    tabletDensity.value = d
+    if (typeof localStorage !== 'undefined') localStorage.setItem(TABLET_DENSITY_KEY, d)
   }
 
   function setMode(newMode) {
@@ -103,6 +114,7 @@ export const useStockStore = defineStore('stock', () => {
   return {
     gridSize, setGridSize,
     mobileDensity, setMobileDensity,
+    tabletDensity, setTabletDensity,
     mode, sectors, date, marketOpen, updatedAt, loading, error,
     setMode, setData, setLoading, setError,
     etfs, etfDate, etfUpdatedAt, etfLoading, etfError, etfSortBy,

@@ -1,0 +1,461 @@
+/* tokens.css — Design tokens for Twse_Top100_Heat
+ * Dark mode = :root defaults (current neon palette preserved exactly)
+ * Light mode = html[data-theme="light"] (Apple metallic daylight)
+ */
+
+:root {
+  /* ── Layout ── */
+  --app-bg: #050810;
+  --surface: #0a1420;
+  --surface-raised: #0d1928;
+
+  /* ── Typography ── */
+  --text-primary: #c8d8e8;
+  --text-secondary: rgba(180,210,240,0.55);
+  --text-mono: rgba(160,210,240,0.55);
+
+  /* ── Accents ── */
+  --accent: #00e5ff;
+  --accent-etf: #ffb300;
+  --accent-score: #69ff47;
+
+  /* ── Borders ── */
+  --border-subtle: rgba(0,229,255,0.08);
+  --border-default: rgba(0,229,255,0.18);
+  --border-strong: rgba(0,229,255,0.35);
+
+  /* ── Topbar ── */
+  --topbar-bg: rgba(5,8,16,0.94);
+  --topbar-border: rgba(0,229,255,0.18);
+  --topbar-shadow: rgba(0,229,255,0.08);
+  --topbar-blur: 0px;
+
+  /* ── Title gradient stops ── */
+  --title-from: #00e5ff;
+  --title-mid: #7c4dff;
+  --title-to: #e040fb;
+  --title-shadow: rgba(0,229,255,0.4);
+
+  /* ── Badges ── */
+  --badge-open-bg: rgba(0,230,120,0.1);
+  --badge-open-color: #00e676;
+  --badge-open-border: rgba(0,230,120,0.35);
+  --badge-closed-bg: rgba(255,60,60,0.08);
+  --badge-closed-color: #ff5555;
+  --badge-closed-border: rgba(255,60,60,0.25);
+  --badge-date-bg: rgba(124,77,255,0.1);
+  --badge-date-color: #bb86fc;
+  --badge-date-border: rgba(124,77,255,0.3);
+  --last-updated-color: rgba(0,229,255,0.28);
+
+  /* ── Price change ── */
+  --pct-up: #ff6b6b;
+  --pct-up-shadow: rgba(255,80,80,0.55);
+  --pct-down: #00e676;
+  --pct-down-shadow: rgba(0,230,120,0.55);
+  --pct-flat: rgba(140,200,230,0.35);
+
+  /* ── Scrollbar ── */
+  --scrollbar-from: #00e5ff;
+  --scrollbar-to: #7c4dff;
+
+  /* ── Stock heat tiers ── */
+  --tier-dr-bg: #4a0a0a;
+  --tier-dr-glow: rgba(255,60,60,0.5);
+  --tier-dr-border: rgba(255,60,60,0.3);
+
+  --tier-lr-bg: #3a1212;
+  --tier-lr-glow: rgba(255,100,100,0.3);
+  --tier-lr-border: rgba(255,100,100,0.2);
+
+  --tier-nt-bg: #0d1520;
+  --tier-nt-glow: rgba(0,229,255,0.15);
+  --tier-nt-border: rgba(0,229,255,0.1);
+
+  --tier-lg-bg: #0a2a1a;
+  --tier-lg-glow: rgba(0,230,120,0.3);
+  --tier-lg-border: rgba(0,230,120,0.2);
+
+  --tier-dg-bg: #062015;
+  --tier-dg-glow: rgba(0,200,100,0.5);
+  --tier-dg-border: rgba(0,200,100,0.3);
+
+  /* ── ETF heat tiers ── */
+  --etf-dr-bg: #4a1a00;
+  --etf-dr-glow: rgba(255,120,0,0.5);
+  --etf-dr-border: rgba(255,120,0,0.32);
+
+  --etf-lr-bg: #2e1800;
+  --etf-lr-glow: rgba(255,165,0,0.3);
+  --etf-lr-border: rgba(255,165,0,0.22);
+
+  --etf-nt-bg: #111008;
+  --etf-nt-glow: rgba(255,193,7,0.15);
+  --etf-nt-border: rgba(255,179,0,0.12);
+
+  --etf-lg-bg: #0a2000;
+  --etf-lg-glow: rgba(0,230,120,0.3);
+  --etf-lg-border: rgba(0,230,120,0.2);
+
+  --etf-dg-bg: #052015;
+  --etf-dg-glow: rgba(0,200,100,0.5);
+  --etf-dg-border: rgba(0,200,100,0.32);
+
+  /* ── Sector block ── */
+  --sector-bg: rgba(255,255,255,0.03);
+  --sector-border: rgba(255,255,255,0.08);
+  --sector-name-color: rgba(0,229,255,0.75);
+  --sector-count-color: rgba(200,220,240,0.42);
+
+  /* ── Cell chrome ── */
+  --cell-rank-color: #00e5ff;
+  --cell-rank-shadow: rgba(0,229,255,0.55);
+  --cell-sector-color: rgba(180,220,255,0.45);
+  --cell-sector-bg: rgba(0,229,255,0.06);
+  --cell-sector-border: rgba(0,229,255,0.1);
+  --cell-code-color: rgba(160,210,240,0.45);
+  --cell-price-color: rgba(200,230,255,0.6);
+  --cell-name-color: #e8f4ff;
+  --cell-name-shadow: rgba(200,230,255,0.25);
+  --cell-score-color: rgba(140,200,230,0.55);
+  --cell-value-color: rgba(140,200,230,0.6);
+  --cell-border-default: rgba(0,229,255,0.1);
+  --cell-hover-border: rgba(0,229,255,0.5);
+  --cell-hover-sweep: rgba(0,229,255,0.07);
+  --cell-empty-bg: rgba(0,255,255,0.02);
+  --cell-empty-border: rgba(0,255,255,0.08);
+
+  /* ── ETF cell chrome ── */
+  --etf-cell-rank-color: #ffb300;
+  --etf-cell-rank-shadow: rgba(255,179,0,0.55);
+  --etf-cell-scale-color: rgba(255,200,80,0.55);
+  --etf-cell-code-color: rgba(255,210,120,0.4);
+  --etf-cell-price-color: rgba(255,220,160,0.6);
+  --etf-cell-name-color: #fff3e0;
+  --etf-cell-name-shadow: rgba(255,179,0,0.2);
+  --etf-cell-turnover-color: rgba(255,210,100,0.7);
+  --etf-cell-portfolio-color: rgba(255,190,70,0.45);
+  --etf-cell-border-default: rgba(255,179,0,0.12);
+  --etf-cell-hover-border: rgba(255,179,0,0.55);
+  --etf-cell-hover-sweep: rgba(255,179,0,0.07);
+  --etf-cell-empty-bg: rgba(255,179,0,0.02);
+  --etf-cell-empty-border: rgba(255,179,0,0.08);
+  --etf-tooltip-bg: rgba(12,9,2,0.96);
+  --etf-tooltip-border: rgba(255,179,0,0.35);
+  --etf-tooltip-shadow: rgba(255,179,0,0.12);
+  --etf-tooltip-label: rgba(255,179,0,0.55);
+  --etf-tooltip-val: #ffd54f;
+
+  /* ── Controls (HeatmapGrid / EtfGrid UI chrome) ── */
+  --ctrl-page-btn-bg: rgba(0,255,255,0.05);
+  --ctrl-page-btn-color: #00e5ff;
+  --ctrl-page-btn-border: rgba(0,255,255,0.3);
+  --ctrl-page-btn-hover-bg: rgba(0,255,255,0.15);
+  --ctrl-page-btn-hover-shadow: rgba(0,255,255,0.3);
+  --ctrl-dot-bg: rgba(0,255,255,0.05);
+  --ctrl-dot-border: rgba(0,255,255,0.2);
+  --ctrl-dot-color: #555;
+  --ctrl-dot-hover-bg: rgba(0,255,255,0.12);
+  --ctrl-dot-hover-color: #00e5ff;
+  --ctrl-dot-active-bg: rgba(0,229,255,0.15);
+  --ctrl-dot-active-border: #00e5ff;
+  --ctrl-dot-active-color: #00e5ff;
+  --ctrl-dot-active-shadow: rgba(0,229,255,0.4);
+  --ctrl-page-info-color: #444;
+  --ctrl-jump-bg: #0a1520;
+  --ctrl-jump-color: #00e5ff;
+  --ctrl-jump-border: rgba(0,229,255,0.3);
+  --ctrl-search-bg: #0a1520;
+  --ctrl-search-border: rgba(0,229,255,0.25);
+  --ctrl-search-color: #a0d2f0;
+  --ctrl-search-placeholder: rgba(0,229,255,0.25);
+  --ctrl-search-focus-border: #00e5ff;
+  --ctrl-search-focus-shadow: rgba(0,229,255,0.3);
+  --ctrl-error-color: #ff4444;
+  --ctrl-state-color: #444;
+  --ctrl-loading-dot: #00e5ff;
+
+  /* ── ETF controls ── */
+  --etf-ctrl-page-btn-bg: rgba(255,179,0,0.05);
+  --etf-ctrl-page-btn-color: #ffb300;
+  --etf-ctrl-page-btn-border: rgba(255,179,0,0.3);
+  --etf-ctrl-page-btn-hover-bg: rgba(255,179,0,0.14);
+  --etf-ctrl-page-btn-hover-shadow: rgba(255,179,0,0.3);
+  --etf-ctrl-dot-bg: rgba(255,179,0,0.05);
+  --etf-ctrl-dot-border: rgba(255,179,0,0.2);
+  --etf-ctrl-dot-hover-bg: rgba(255,179,0,0.12);
+  --etf-ctrl-dot-hover-color: #ffb300;
+  --etf-ctrl-dot-active-bg: rgba(255,179,0,0.15);
+  --etf-ctrl-dot-active-border: #ffb300;
+  --etf-ctrl-dot-active-color: #ffb300;
+  --etf-ctrl-dot-active-shadow: rgba(255,179,0,0.4);
+  --etf-ctrl-page-info-color: #554400;
+  --etf-ctrl-jump-bg: #120c00;
+  --etf-ctrl-jump-color: #ffb300;
+  --etf-ctrl-jump-border: rgba(255,179,0,0.3);
+  --etf-ctrl-search-bg: #120c00;
+  --etf-ctrl-search-border: rgba(255,179,0,0.25);
+  --etf-ctrl-search-color: rgba(255,220,160,0.8);
+  --etf-ctrl-search-placeholder: rgba(255,179,0,0.25);
+  --etf-ctrl-search-focus-border: #ffb300;
+  --etf-ctrl-search-focus-shadow: rgba(255,179,0,0.3);
+  --etf-ctrl-error-color: #ff8c42;
+  --etf-ctrl-state-color: #554400;
+  --etf-ctrl-loading-dot: #ffb300;
+  --etf-sort-toggle-bg: rgba(255,179,0,0.04);
+  --etf-sort-toggle-border: rgba(255,179,0,0.15);
+  --etf-sort-btn-color: rgba(255,179,0,0.4);
+  --etf-sort-btn-hover-bg: rgba(255,179,0,0.1);
+  --etf-sort-btn-active-bg: rgba(255,179,0,0.18);
+  --etf-sort-btn-active-shadow: rgba(255,179,0,0.25);
+  --etf-info-trigger-color: rgba(255,179,0,0.45);
+  --etf-info-trigger-border: rgba(255,179,0,0.25);
+
+  /* ── Token settings ── */
+  --token-btn-border: #444;
+  --token-btn-color: #888;
+  --token-set-color: #4caf8a;
+  --token-panel-bg: #1e1e1e;
+  --token-panel-border: #444;
+  --token-title-color: #aaa;
+  --token-input-bg: #111;
+  --token-input-border: #555;
+  --token-input-color: #ddd;
+  --token-save-bg: #2a4a3a;
+  --token-save-color: #4caf8a;
+  --token-clear-bg: #3a2a2a;
+  --token-clear-color: #cf6679;
+}
+
+/* ═══════════════════════════════════════════════════════
+   LIGHT MODE — Apple metallic daylight
+   ═══════════════════════════════════════════════════════ */
+html[data-theme="light"] {
+  /* ── Layout ── */
+  --app-bg: #f5f5f7;
+  --surface: #ffffff;
+  --surface-raised: #fafafa;
+
+  /* ── Typography ── */
+  --text-primary: #1d1d1f;
+  --text-secondary: rgba(60,60,67,0.6);
+  --text-mono: rgba(60,60,67,0.5);
+
+  /* ── Accents ── */
+  --accent: #0071e3;
+  --accent-etf: #ff9f0a;
+  --accent-score: #34c759;
+
+  /* ── Borders ── */
+  --border-subtle: rgba(0,0,0,0.06);
+  --border-default: rgba(0,0,0,0.12);
+  --border-strong: rgba(0,113,227,0.35);
+
+  /* ── Topbar (frosted glass) ── */
+  --topbar-bg: rgba(255,255,255,0.88);
+  --topbar-border: rgba(0,0,0,0.1);
+  --topbar-shadow: rgba(0,0,0,0.06);
+  --topbar-blur: 20px;
+
+  /* ── Title gradient stops ── */
+  --title-from: #0071e3;
+  --title-mid: #5e5ce6;
+  --title-to: #bf5af2;
+  --title-shadow: rgba(0,113,227,0.3);
+
+  /* ── Badges ── */
+  --badge-open-bg: rgba(0,200,80,0.1);
+  --badge-open-color: #1a8a3a;
+  --badge-open-border: rgba(0,180,70,0.3);
+  --badge-closed-bg: rgba(200,0,0,0.07);
+  --badge-closed-color: #c0392b;
+  --badge-closed-border: rgba(200,0,0,0.2);
+  --badge-date-bg: rgba(94,92,230,0.08);
+  --badge-date-color: #5e5ce6;
+  --badge-date-border: rgba(94,92,230,0.25);
+  --last-updated-color: rgba(0,0,0,0.38);
+
+  /* ── Price change ── */
+  --pct-up: #c0392b;
+  --pct-up-shadow: rgba(200,0,0,0.25);
+  --pct-down: #1a7a3a;
+  --pct-down-shadow: rgba(0,160,60,0.25);
+  --pct-flat: rgba(60,60,67,0.35);
+
+  /* ── Scrollbar ── */
+  --scrollbar-from: #0071e3;
+  --scrollbar-to: #5e5ce6;
+
+  /* ── Stock heat tiers (pastel on white) ── */
+  --tier-dr-bg: #fff0f0;
+  --tier-dr-glow: rgba(200,0,0,0.10);
+  --tier-dr-border: rgba(200,0,0,0.22);
+
+  --tier-lr-bg: #fff7f5;
+  --tier-lr-glow: rgba(200,60,60,0.07);
+  --tier-lr-border: rgba(200,60,60,0.15);
+
+  --tier-nt-bg: #f5f7fa;
+  --tier-nt-glow: rgba(0,113,227,0.07);
+  --tier-nt-border: rgba(0,0,0,0.09);
+
+  --tier-lg-bg: #f0fff6;
+  --tier-lg-glow: rgba(0,160,60,0.08);
+  --tier-lg-border: rgba(0,160,60,0.18);
+
+  --tier-dg-bg: #e8ffe8;
+  --tier-dg-glow: rgba(0,140,50,0.12);
+  --tier-dg-border: rgba(0,140,50,0.25);
+
+  /* ── ETF heat tiers ── */
+  --etf-dr-bg: #fff3e0;
+  --etf-dr-glow: rgba(230,80,0,0.08);
+  --etf-dr-border: rgba(230,80,0,0.20);
+
+  --etf-lr-bg: #fff8e1;
+  --etf-lr-glow: rgba(230,140,0,0.06);
+  --etf-lr-border: rgba(230,140,0,0.15);
+
+  --etf-nt-bg: #fffde7;
+  --etf-nt-glow: rgba(200,150,0,0.05);
+  --etf-nt-border: rgba(180,130,0,0.12);
+
+  --etf-lg-bg: #f1f8e9;
+  --etf-lg-glow: rgba(0,160,60,0.08);
+  --etf-lg-border: rgba(0,160,60,0.18);
+
+  --etf-dg-bg: #e8f5e9;
+  --etf-dg-glow: rgba(0,140,50,0.12);
+  --etf-dg-border: rgba(0,140,50,0.25);
+
+  /* ── Sector block ── */
+  --sector-bg: rgba(0,0,0,0.02);
+  --sector-border: rgba(0,0,0,0.08);
+  --sector-name-color: #0071e3;
+  --sector-count-color: rgba(60,60,67,0.5);
+
+  /* ── Cell chrome ── */
+  --cell-rank-color: #0071e3;
+  --cell-rank-shadow: rgba(0,113,227,0.3);
+  --cell-sector-color: rgba(0,113,227,0.7);
+  --cell-sector-bg: rgba(0,113,227,0.06);
+  --cell-sector-border: rgba(0,113,227,0.15);
+  --cell-code-color: rgba(60,60,67,0.55);
+  --cell-price-color: rgba(29,29,31,0.75);
+  --cell-name-color: #1d1d1f;
+  --cell-name-shadow: rgba(0,0,0,0.1);
+  --cell-score-color: rgba(0,113,227,0.7);
+  --cell-value-color: rgba(29,29,31,0.7);
+  --cell-border-default: rgba(0,0,0,0.09);
+  --cell-hover-border: rgba(0,113,227,0.4);
+  --cell-hover-sweep: rgba(0,113,227,0.04);
+  --cell-empty-bg: rgba(0,0,0,0.02);
+  --cell-empty-border: rgba(0,0,0,0.07);
+
+  /* ── ETF cell chrome ── */
+  --etf-cell-rank-color: #ff9f0a;
+  --etf-cell-rank-shadow: rgba(255,159,10,0.3);
+  --etf-cell-scale-color: rgba(180,90,0,0.7);
+  --etf-cell-code-color: rgba(100,60,0,0.55);
+  --etf-cell-price-color: rgba(80,50,0,0.7);
+  --etf-cell-name-color: #1d1d1f;
+  --etf-cell-name-shadow: rgba(180,90,0,0.1);
+  --etf-cell-turnover-color: rgba(160,80,0,0.75);
+  --etf-cell-portfolio-color: rgba(140,70,0,0.6);
+  --etf-cell-border-default: rgba(255,159,10,0.15);
+  --etf-cell-hover-border: rgba(255,159,10,0.45);
+  --etf-cell-hover-sweep: rgba(255,159,10,0.04);
+  --etf-cell-empty-bg: rgba(255,159,10,0.02);
+  --etf-cell-empty-border: rgba(255,159,10,0.08);
+  --etf-tooltip-bg: rgba(255,255,255,0.97);
+  --etf-tooltip-border: rgba(255,159,10,0.3);
+  --etf-tooltip-shadow: rgba(0,0,0,0.08);
+  --etf-tooltip-label: rgba(180,90,0,0.75);
+  --etf-tooltip-val: #b35a00;
+
+  /* ── Controls ── */
+  --ctrl-page-btn-bg: rgba(0,113,227,0.05);
+  --ctrl-page-btn-color: #0071e3;
+  --ctrl-page-btn-border: rgba(0,113,227,0.25);
+  --ctrl-page-btn-hover-bg: rgba(0,113,227,0.12);
+  --ctrl-page-btn-hover-shadow: rgba(0,113,227,0.2);
+  --ctrl-dot-bg: rgba(0,113,227,0.04);
+  --ctrl-dot-border: rgba(0,0,0,0.15);
+  --ctrl-dot-color: #888;
+  --ctrl-dot-hover-bg: rgba(0,113,227,0.08);
+  --ctrl-dot-hover-color: #0071e3;
+  --ctrl-dot-active-bg: rgba(0,113,227,0.12);
+  --ctrl-dot-active-border: #0071e3;
+  --ctrl-dot-active-color: #0071e3;
+  --ctrl-dot-active-shadow: rgba(0,113,227,0.3);
+  --ctrl-page-info-color: #888;
+  --ctrl-jump-bg: #ffffff;
+  --ctrl-jump-color: #0071e3;
+  --ctrl-jump-border: rgba(0,113,227,0.25);
+  --ctrl-search-bg: #ffffff;
+  --ctrl-search-border: rgba(0,0,0,0.15);
+  --ctrl-search-color: #1d1d1f;
+  --ctrl-search-placeholder: rgba(0,0,0,0.3);
+  --ctrl-search-focus-border: #0071e3;
+  --ctrl-search-focus-shadow: rgba(0,113,227,0.2);
+  --ctrl-error-color: #c0392b;
+  --ctrl-state-color: #888;
+  --ctrl-loading-dot: #0071e3;
+
+  /* ── ETF controls ── */
+  --etf-ctrl-page-btn-bg: rgba(255,159,10,0.05);
+  --etf-ctrl-page-btn-color: #e68900;
+  --etf-ctrl-page-btn-border: rgba(255,159,10,0.25);
+  --etf-ctrl-page-btn-hover-bg: rgba(255,159,10,0.12);
+  --etf-ctrl-page-btn-hover-shadow: rgba(255,159,10,0.2);
+  --etf-ctrl-dot-bg: rgba(255,159,10,0.04);
+  --etf-ctrl-dot-border: rgba(0,0,0,0.15);
+  --etf-ctrl-dot-hover-bg: rgba(255,159,10,0.08);
+  --etf-ctrl-dot-hover-color: #e68900;
+  --etf-ctrl-dot-active-bg: rgba(255,159,10,0.12);
+  --etf-ctrl-dot-active-border: #e68900;
+  --etf-ctrl-dot-active-color: #e68900;
+  --etf-ctrl-dot-active-shadow: rgba(255,159,10,0.3);
+  --etf-ctrl-page-info-color: #888;
+  --etf-ctrl-jump-bg: #ffffff;
+  --etf-ctrl-jump-color: #e68900;
+  --etf-ctrl-jump-border: rgba(255,159,10,0.25);
+  --etf-ctrl-search-bg: #ffffff;
+  --etf-ctrl-search-border: rgba(0,0,0,0.15);
+  --etf-ctrl-search-color: #1d1d1f;
+  --etf-ctrl-search-placeholder: rgba(0,0,0,0.3);
+  --etf-ctrl-search-focus-border: #e68900;
+  --etf-ctrl-search-focus-shadow: rgba(255,159,10,0.2);
+  --etf-ctrl-error-color: #c0392b;
+  --etf-ctrl-state-color: #888;
+  --etf-ctrl-loading-dot: #e68900;
+  --etf-sort-toggle-bg: rgba(255,159,10,0.04);
+  --etf-sort-toggle-border: rgba(255,159,10,0.2);
+  --etf-sort-btn-color: rgba(200,100,0,0.6);
+  --etf-sort-btn-hover-bg: rgba(255,159,10,0.08);
+  --etf-sort-btn-active-bg: rgba(255,159,10,0.14);
+  --etf-sort-btn-active-shadow: rgba(255,159,10,0.2);
+  --etf-info-trigger-color: rgba(200,100,0,0.6);
+  --etf-info-trigger-border: rgba(255,159,10,0.25);
+
+  /* ── Token settings ── */
+  --token-btn-border: #c7c7cc;
+  --token-btn-color: #6e6e73;
+  --token-set-color: #34c759;
+  --token-panel-bg: #ffffff;
+  --token-panel-border: #c7c7cc;
+  --token-title-color: #6e6e73;
+  --token-input-bg: #f5f5f7;
+  --token-input-border: #c7c7cc;
+  --token-input-color: #1d1d1f;
+  --token-save-bg: rgba(52,199,89,0.1);
+  --token-save-color: #1a8a3a;
+  --token-clear-bg: rgba(255,59,48,0.08);
+  --token-clear-color: #c0392b;
+}
+
+/* ── Topbar frosted-glass (light mode only) ── */
+html[data-theme="light"] .topbar {
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+}

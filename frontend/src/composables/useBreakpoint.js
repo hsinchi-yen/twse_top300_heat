@@ -1,28 +1,31 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
-const MOBILE_QUERY = '(max-width: 768px)'
+const MOBILE_QUERY  = '(max-width: 768px)'
+const TABLET_QUERY  = '(min-width: 769px) and (max-width: 1024px)'
 
-// Reactive isMobile flag driven by matchMedia.
-// Guards against environments without matchMedia (e.g. jsdom in tests),
-// where it defaults to desktop (false).
 export function useBreakpoint() {
   const isMobile = ref(false)
-  let mql = null
+  const isTablet = ref(false)
+  let mqlMobile = null
+  let mqlTablet = null
 
-  function update(e) {
-    isMobile.value = e.matches
-  }
+  function updateMobile(e) { isMobile.value = e.matches }
+  function updateTablet(e) { isTablet.value = e.matches }
 
   onMounted(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    mql = window.matchMedia(MOBILE_QUERY)
-    isMobile.value = mql.matches
-    mql.addEventListener('change', update)
+    mqlMobile = window.matchMedia(MOBILE_QUERY)
+    mqlTablet = window.matchMedia(TABLET_QUERY)
+    isMobile.value = mqlMobile.matches
+    isTablet.value = mqlTablet.matches
+    mqlMobile.addEventListener('change', updateMobile)
+    mqlTablet.addEventListener('change', updateTablet)
   })
 
   onUnmounted(() => {
-    if (mql) mql.removeEventListener('change', update)
+    if (mqlMobile) mqlMobile.removeEventListener('change', updateMobile)
+    if (mqlTablet) mqlTablet.removeEventListener('change', updateTablet)
   })
 
-  return { isMobile }
+  return { isMobile, isTablet }
 }

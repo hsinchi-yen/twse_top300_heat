@@ -153,7 +153,7 @@ function formatPortfolioTurnover(v) {
   cursor: default;
   position: relative;
   overflow: hidden;
-  border: 1px solid rgba(255, 179, 0, 0.12);
+  border: 1px solid var(--etf-cell-border-default);
   transition: filter 0.12s, transform 0.12s, border-color 0.12s;
 }
 
@@ -181,7 +181,7 @@ function formatPortfolioTurnover(v) {
   position: absolute;
   inset: 0;
   border-radius: 6px;
-  background: linear-gradient(135deg, rgba(255, 179, 0, 0.07) 0%, transparent 55%);
+  background: linear-gradient(135deg, var(--etf-cell-hover-sweep) 0%, transparent 55%);
   opacity: 0;
   transition: opacity 0.15s;
 }
@@ -189,21 +189,21 @@ function formatPortfolioTurnover(v) {
   filter: brightness(1.25);
   transform: scale(1.02);
   z-index: 10;
-  border-color: rgba(255, 179, 0, 0.55);
+  border-color: var(--etf-cell-hover-border);
 }
 .etf-cell:hover::before { opacity: 1; }
 
 /* Tier accent borders */
-.etf-cell[data-tier="deep_red"]    { border-color: rgba(255, 120, 0, 0.32); }
-.etf-cell[data-tier="light_red"]   { border-color: rgba(255, 165, 0, 0.22); }
-.etf-cell[data-tier="light_green"] { border-color: rgba(0, 230, 120, 0.2); }
-.etf-cell[data-tier="deep_green"]  { border-color: rgba(0, 200, 100, 0.32); }
+.etf-cell[data-tier="deep_red"]    { border-color: var(--etf-dr-border); }
+.etf-cell[data-tier="light_red"]   { border-color: var(--etf-lr-border); }
+.etf-cell[data-tier="light_green"] { border-color: var(--etf-lg-border); }
+.etf-cell[data-tier="deep_green"]  { border-color: var(--etf-dg-border); }
 
 /* ── Hover tooltip ── */
 .etf-tooltip {
   position: absolute;
   inset: 0;
-  background: rgba(12, 9, 2, 0.92);
+  background: var(--etf-tooltip-bg);
   border-radius: 6px;
   display: flex;
   flex-direction: column;
@@ -226,7 +226,7 @@ function formatPortfolioTurnover(v) {
 
 .tooltip-label {
   font-size: 0.56rem;
-  color: rgba(255, 179, 0, 0.55);
+  color: var(--etf-tooltip-label);
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   letter-spacing: 0.04em;
 }
@@ -234,12 +234,12 @@ function formatPortfolioTurnover(v) {
 .tooltip-val {
   font-size: 0.65rem;
   font-weight: 700;
-  color: #ffd54f;
+  color: var(--etf-tooltip-val);
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   letter-spacing: 0.02em;
 }
 
-.tooltip-val--portfolio { color: rgba(255, 220, 130, 0.75); }
+.tooltip-val--portfolio { color: color-mix(in srgb, var(--etf-tooltip-val) 65%, transparent); }
 
 /* ── Top row ── */
 .cell-top {
@@ -253,9 +253,9 @@ function formatPortfolioTurnover(v) {
 .cell-rank {
   font-size: 0.58rem;
   font-weight: 700;
-  color: #ffb300;
+  color: var(--etf-cell-rank-color);
   letter-spacing: 0.02em;
-  text-shadow: 0 0 5px rgba(255, 179, 0, 0.55);
+  text-shadow: 0 0 5px var(--etf-cell-rank-shadow);
   flex-shrink: 0;
 }
 
@@ -266,16 +266,16 @@ function formatPortfolioTurnover(v) {
   white-space: nowrap;
   font-weight: 600;
   letter-spacing: 0.02em;
-  background: rgba(255, 179, 0, 0.1);
-  border: 1px solid rgba(255, 179, 0, 0.22);
-  color: rgba(255, 210, 100, 0.7);
+  background: color-mix(in srgb, var(--accent-etf) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-etf) 22%, transparent);
+  color: color-mix(in srgb, var(--accent-etf) 70%, transparent);
   flex-shrink: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 38%;
 }
 
-/* ── 8-type badge colors ── */
+/* ── 8-type badge colors (functional coloring — intentionally kept as literal values) ── */
 .cell-type-badge[data-type="國內股"]  { color: rgba(255,210,80,0.80); border-color: rgba(255,210,80,0.25); background: rgba(255,210,80,0.07); }
 .cell-type-badge[data-type="國外股"]  { color: rgba(80,200,255,0.80); border-color: rgba(80,200,255,0.25); background: rgba(80,200,255,0.07); }
 .cell-type-badge[data-type="多資產"]  { color: rgba(180,100,255,0.80); border-color: rgba(180,100,255,0.25); background: rgba(180,100,255,0.07); }
@@ -293,7 +293,7 @@ function formatPortfolioTurnover(v) {
 
 .cell-scale {
   font-size: 0.52rem;
-  color: rgba(255, 200, 80, 0.55);
+  color: var(--etf-cell-scale-color);
   letter-spacing: 0.02em;
   white-space: nowrap;
   flex-shrink: 0;
@@ -311,7 +311,7 @@ function formatPortfolioTurnover(v) {
 .cell-code {
   font-size: 0.62rem;
   font-weight: 500;
-  color: rgba(255, 210, 120, 0.4);
+  color: var(--etf-cell-code-color);
   letter-spacing: 0.04em;
   line-height: 1;
 }
@@ -319,7 +319,7 @@ function formatPortfolioTurnover(v) {
 .cell-price {
   font-size: 0.68rem;
   font-weight: 600;
-  color: rgba(255, 220, 160, 0.6);
+  color: var(--etf-cell-price-color);
   letter-spacing: 0.02em;
 }
 
@@ -328,12 +328,12 @@ function formatPortfolioTurnover(v) {
   flex: 1;
   font-size: clamp(0.78rem, 1.3vw, 1.0rem);
   font-weight: 700;
-  color: #fff3e0;
+  color: var(--etf-cell-name-color);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.2;
-  text-shadow: 0 0 6px rgba(255, 179, 0, 0.2);
+  text-shadow: 0 0 6px var(--etf-cell-name-shadow);
   display: flex;
   align-items: center;
   min-height: 0;
@@ -351,7 +351,7 @@ function formatPortfolioTurnover(v) {
 /* 持股週轉率（左下）— 日化，偏暗 */
 .cell-portfolio {
   font-size: 0.58rem;
-  color: rgba(255, 190, 70, 0.45);
+  color: var(--etf-cell-portfolio-color);
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
@@ -360,25 +360,25 @@ function formatPortfolioTurnover(v) {
 .cell-turnover {
   font-size: 0.62rem;
   font-weight: 600;
-  color: rgba(255, 210, 100, 0.7);
+  color: var(--etf-cell-turnover-color);
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
 .cell-turnover--vol {
   font-size: 0.58rem;
   font-weight: 400;
-  color: rgba(255, 190, 70, 0.4);
+  color: var(--etf-cell-portfolio-color);
 }
 
 /* hover tooltip 漲跌幅顏色 */
-.pct-up   { color: #ff6b6b; }
-.pct-down { color: #00e676; }
-.pct-flat { color: rgba(255, 200, 80, 0.3); }
+.pct-up   { color: var(--pct-up); }
+.pct-down { color: var(--pct-down); }
+.pct-flat { color: color-mix(in srgb, var(--accent-etf) 30%, transparent); }
 
 @media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) {
   .etf-cell { transition: none; }
   .etf-cell::before, .etf-cell::after, .etf-tooltip { display: none; }
-  .etf-cell:hover { filter: none; transform: none; border-color: rgba(255, 179, 0, 0.12); }
+  .etf-cell:hover { filter: none; transform: none; border-color: var(--etf-cell-border-default); }
   .cell-rank, .cell-name, .pct-up, .pct-down { text-shadow: none; }
 }
 

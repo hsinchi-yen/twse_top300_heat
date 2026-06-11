@@ -16,6 +16,15 @@
           <span class="last-updated mono">{{ formattedTime }}</span>
           <ScoreRefreshBtn />
           <TokenSettings />
+          <button
+            class="theme-toggle"
+            @click="themeStore.toggle()"
+            :aria-label="themeStore.theme === 'dark' ? '切換亮色模式' : '切換暗色模式'"
+            :title="themeStore.theme === 'dark' ? '亮色' : '暗色'"
+          >
+            <span v-if="themeStore.theme === 'dark'">☀</span>
+            <span v-else>🌙</span>
+          </button>
         </div>
       </div>
       <div class="topbar-controls">
@@ -23,9 +32,11 @@
           :mode="mode"
           :grid-size="gridSize"
           :mobile-density="mobileDensity"
+          :tablet-density="tabletDensity"
           @mode-change="onModeChange"
           @grid-size-change="onGridSizeChange"
           @density-change="onDensityChange"
+          @tablet-density-change="onTabletDensityChange"
         />
       </div>
     </header>
@@ -41,6 +52,7 @@
 import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useStockStore } from './stores/stockStore'
+import { useThemeStore } from './stores/themeStore'
 import { useStockData } from './composables/useStockData'
 import { useEtfData } from './composables/useEtfData'
 import { fetchScores } from './composables/useScoreData'
@@ -54,8 +66,9 @@ import ScoreRefreshBtn from './components/ScoreRefreshBtn.vue'
 const isEmbedded = import.meta.env.VITE_EMBEDDED === 'true'
 
 const store = useStockStore()
+const themeStore = useThemeStore()
 const {
-  mode, gridSize, mobileDensity,
+  mode, gridSize, mobileDensity, tabletDensity,
   marketOpen, updatedAt, date: dataDate, etfDate, etfUpdatedAt,
   scoresLoaded, scoresFetching,
 } = storeToRefs(store)
@@ -80,7 +93,11 @@ function onDensityChange(d) {
   store.setMobileDensity(d)
 }
 
-const todayStr = new Date().toLocaleDateString('sv-SE')  // "2026-05-16"
+function onTabletDensityChange(d) {
+  store.setTabletDensity(d)
+}
+
+const todayStr = new Date().toLocaleDateString('sv-SE')
 
 const activeDate = computed(() => mode.value === 'etf' ? etfDate.value : dataDate.value)
 const activeUpdatedAt = computed(() => mode.value === 'etf' ? etfUpdatedAt.value : updatedAt.value)
@@ -98,7 +115,7 @@ const formattedTime = computed(() => {
   height: 100vh;
   height: 100dvh;
   background: transparent;
-  color: #c8d8e8;
+  color: var(--text-primary);
   font-family: 'Inter', 'Noto Sans TC', sans-serif;
 }
 
@@ -107,11 +124,12 @@ const formattedTime = computed(() => {
   flex-direction: column;
   gap: 0.35rem;
   padding: 0.55rem 1.5rem;
-  background: rgba(5, 8, 16, 0.94);
-  border-bottom: 1px solid rgba(0, 229, 255, 0.18);
+  background: var(--topbar-bg);
+  border-bottom: 1px solid var(--topbar-border);
   flex-shrink: 0;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 1px 20px rgba(0, 229, 255, 0.08);
+  backdrop-filter: blur(var(--topbar-blur, 8px));
+  -webkit-backdrop-filter: blur(var(--topbar-blur, 8px));
+  box-shadow: 0 1px 20px var(--topbar-shadow);
   position: relative;
   z-index: 200;
 }
@@ -143,11 +161,11 @@ const formattedTime = computed(() => {
   font-size: 1.05rem;
   font-weight: 800;
   letter-spacing: 0.08em;
-  background: linear-gradient(90deg, #00e5ff 0%, #7c4dff 50%, #e040fb 100%);
+  background: linear-gradient(90deg, var(--title-from) 0%, var(--title-mid) 50%, var(--title-to) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.4));
+  filter: drop-shadow(0 0 6px var(--title-shadow));
 }
 
 .topbar-right {
@@ -167,36 +185,59 @@ const formattedTime = computed(() => {
 }
 
 .badge-open {
-  background: rgba(0, 230, 120, 0.1);
-  color: #00e676;
-  border: 1px solid rgba(0, 230, 120, 0.35);
-  box-shadow: 0 0 8px rgba(0, 230, 120, 0.2);
+  background: var(--badge-open-bg);
+  color: var(--badge-open-color);
+  border: 1px solid var(--badge-open-border);
   animation: pulse-green 2s ease-in-out infinite;
 }
 
 .badge-closed {
-  background: rgba(255, 60, 60, 0.08);
-  color: #ff5555;
-  border: 1px solid rgba(255, 60, 60, 0.25);
+  background: var(--badge-closed-bg);
+  color: var(--badge-closed-color);
+  border: 1px solid var(--badge-closed-border);
 }
 
 .badge-date {
-  background: rgba(124, 77, 255, 0.1);
-  color: #bb86fc;
-  border: 1px solid rgba(124, 77, 255, 0.3);
+  background: var(--badge-date-bg);
+  color: var(--badge-date-color);
+  border: 1px solid var(--badge-date-border);
   font-size: 0.68rem;
 }
 
 @keyframes pulse-green {
-  0%, 100% { box-shadow: 0 0 6px rgba(0, 230, 120, 0.2); }
-  50%       { box-shadow: 0 0 14px rgba(0, 230, 120, 0.45); }
+  0%, 100% { box-shadow: 0 0 6px var(--badge-open-border); }
+  50%       { box-shadow: 0 0 14px var(--badge-open-color); }
 }
 
 .last-updated {
   font-size: 0.68rem;
-  color: rgba(0, 229, 255, 0.28);
+  color: var(--last-updated-color);
   letter-spacing: 0.05em;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ── Theme toggle button ── */
+.theme-toggle {
+  background: var(--border-subtle);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+
+.theme-toggle:hover {
+  background: var(--border-default);
+  border-color: var(--border-strong);
 }
 
 .main-content {
@@ -295,6 +336,12 @@ const formattedTime = computed(() => {
 
   .main-content {
     padding: 0.3rem 0.35rem;
+  }
+
+  .theme-toggle {
+    width: 24px;
+    height: 24px;
+    font-size: 0.75rem;
   }
 }
 </style>

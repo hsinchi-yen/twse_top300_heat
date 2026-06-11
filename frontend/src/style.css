@@ -1,9 +1,6 @@
-* { box-sizing: border-box; margin: 0; padding: 0; }
+@import './style/tokens.css';
 
-:root {
-  --app-bg: #050810;
-  --text-main: #c8d8e8;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 html,
 body,
@@ -14,19 +11,19 @@ body,
 
 body {
   background: var(--app-bg);
-  color: var(--text-main);
+  color: var(--text-primary);
   font-family: 'Inter', 'Noto Sans TC', sans-serif;
   overflow: hidden;
-  /* subtle dot-grid texture */
-  background-image: radial-gradient(rgba(0, 229, 255, 0.04) 1px, transparent 1px);
+  /* subtle dot-grid texture (dark mode only) */
+  background-image: radial-gradient(var(--border-subtle) 1px, transparent 1px);
   background-size: 28px 28px;
 }
 
-/* ── Neon Scrollbar ── */
+/* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-track { background: #050810; }
+::-webkit-scrollbar-track { background: var(--app-bg); }
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #00e5ff 0%, #7c4dff 100%);
+  background: linear-gradient(180deg, var(--scrollbar-from) 0%, var(--scrollbar-to) 100%);
   border-radius: 3px;
 }
 

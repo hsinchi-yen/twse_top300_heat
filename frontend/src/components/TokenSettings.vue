@@ -86,9 +86,9 @@ function clearToken() {
 
 .token-btn {
   background: transparent;
-  border: 1px solid #444;
+  border: 1px solid var(--token-btn-border);
   border-radius: 4px;
-  color: #888;
+  color: var(--token-btn-color);
   cursor: pointer;
   font-size: 1rem;
   padding: 2px 6px;
@@ -96,16 +96,16 @@ function clearToken() {
 }
 
 .token-btn.token-set {
-  border-color: #4caf8a;
-  color: #4caf8a;
+  border-color: var(--token-set-color);
+  color: var(--token-set-color);
 }
 
 .token-panel {
   position: absolute;
   right: 0;
   top: calc(100% + 6px);
-  background: #1e1e1e;
-  border: 1px solid #444;
+  background: var(--token-panel-bg);
+  border: 1px solid var(--token-panel-border);
   border-radius: 6px;
   padding: 10px 12px;
   width: 280px;
@@ -122,14 +122,14 @@ function clearToken() {
 
 .panel-title {
   font-size: 0.78rem;
-  color: #aaa;
+  color: var(--token-title-color);
   font-weight: 600;
 }
 
 .btn-close {
   background: transparent;
   border: none;
-  color: #888;
+  color: var(--token-btn-color);
   cursor: pointer;
   font-size: 0.8rem;
   padding: 0;
@@ -141,16 +141,16 @@ function clearToken() {
 
 .token-status {
   font-size: 0.72rem;
-  color: #777;
+  color: var(--token-btn-color);
   font-family: monospace;
 }
 
 .token-input {
   width: 100%;
-  background: #111;
-  border: 1px solid #555;
+  background: var(--token-input-bg);
+  border: 1px solid var(--token-input-border);
   border-radius: 4px;
-  color: #ddd;
+  color: var(--token-input-color);
   font-size: 0.75rem;
   padding: 5px 8px;
   box-sizing: border-box;
@@ -165,7 +165,6 @@ function clearToken() {
 .btn-save,
 .btn-clear {
   flex: 1;
-  border: 1px solid #555;
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.72rem;
@@ -173,14 +172,14 @@ function clearToken() {
 }
 
 .btn-save {
-  background: #2a4a3a;
-  color: #4caf8a;
-  border-color: #4caf8a;
+  background: var(--token-save-bg);
+  color: var(--token-save-color);
+  border: 1px solid var(--token-set-color);
 }
 
 .btn-clear {
-  background: #3a2a2a;
-  color: #cf6679;
-  border-color: #cf6679;
+  background: var(--token-clear-bg);
+  color: var(--token-clear-color);
+  border: 1px solid var(--token-clear-color);
 }
 </style>
