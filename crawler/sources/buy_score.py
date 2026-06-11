@@ -1,10 +1,21 @@
 """
-buy_score.py — Daily buy score batch fetcher
+buy_score.py — Daily buy score batch fetcher (native computation)
 
-Fetches buy scores for all tracked stocks by proxying to StockAnalysisDashBoard
-(/api/stocks/{stock_id}/buy_score). Results written to a dated JSON file under
-SCORES_DIR (shared volume with backend). No FinMind tokens consumed here —
-StockAnalysisDashBoard handles its own caching.
+Computes buy scores for tracked stocks directly via the local engine
+(sources/buy_score_engine.py → FinMind), with no dependency on any external
+HTTP service. Results are written to a dated JSON file under SCORES_DIR (shared
+volume with backend).
+
+Rate-limit strategy (分時 + 額度耗盡續抓):
+  - REQUEST_DELAY seconds between stocks; the engine also staggers each FinMind
+    dataset call by BUY_SCORE_FETCH_DELAY.
+  - When FinMind quota is exhausted (FinMindError, HTTP 402) the batch writes
+    the partial result, sleeps BUY_SCORE_QUOTA_WAIT_S (default 1 h), then resumes
+    with only the still-unscored stocks. Repeats up to BUY_SCORE_QUOTA_MAX_CYCLES
+    (default 24, ≈ one day).
+  - A stock whose data all fails to fetch (no analyzable criterion) is NOT
+    persisted as a misleading 0/24 — it returns None (frontend shows N/A) and is
+    retried on the next quota cycle.
 """
 
 import json
@@ -16,71 +27,123 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import requests
+from sources.buy_score_engine import compute_buy_score
+from sources.finmind_client import FinMindError
 
 logger = logging.getLogger(__name__)
 
-STOCK_ANALYSIS_URL = os.getenv("STOCK_ANALYSIS_URL", "http://host.docker.internal:18000")
 SCORES_DIR = Path(os.getenv("SCORES_DIR", "/app/data/buy_scores"))
 FINMIND_TOKEN = os.getenv("FINMIND_TOKEN", "")
 TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 REQUEST_DELAY = float(os.getenv("BUY_SCORE_REQUEST_DELAY", "1.2"))
-REQUEST_TIMEOUT = float(os.getenv("BUY_SCORE_TIMEOUT", "30.0"))
+# Quota-exhaustion resume: wait this long then continue with unscored stocks.
+QUOTA_WAIT_S = float(os.getenv("BUY_SCORE_QUOTA_WAIT_S", "3600"))
+QUOTA_MAX_CYCLES = int(os.getenv("BUY_SCORE_QUOTA_MAX_CYCLES", "24"))
 MAX_KEEP_DAYS = 7
 
 
-def fetch_buy_score(stock_id: str) -> dict | None:
-    """Fetch buy score for one stock from StockAnalysisDashBoard.
+def fetch_buy_score(stock_id: str, token: str | None = None) -> dict | None:
+    """Compute buy score for one stock natively.
 
-    Returns {"score": int, "max_score": int} or None on any failure.
-    Passes FINMIND_TOKEN via X-FinMind-Token header if available.
+    Returns {"score": int, "max_score": int} or None on failure.
+    Raises FinMindError when FinMind quota is exhausted so the batch caller can
+    pause and resume later — non-quota failures degrade to None.
+
+    A result with no analyzable criterion (eligible_count == 0, i.e. every data
+    fetch failed) is treated as a failure (None), not persisted as 0/24.
     """
-    url = f"{STOCK_ANALYSIS_URL}/api/stocks/{stock_id}/buy_score"
-    headers = {}
-    if FINMIND_TOKEN:
-        headers["X-FinMind-Token"] = FINMIND_TOKEN
     try:
-        resp = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-        if resp.status_code == 200:
-            data = resp.json()
-            max_score = data.get("max_score")
-            if not max_score:
-                logger.info("buy_score %s: max_score=%s, no analyzable criteria", stock_id, max_score)
-                return None
-            return {"score": data.get("score"), "max_score": max_score}
-        logger.warning("buy_score %s: HTTP %d", stock_id, resp.status_code)
-        return None
+        result = compute_buy_score(stock_id, token=token if token is not None else FINMIND_TOKEN)
+    except FinMindError:
+        raise
     except Exception as exc:
         logger.warning("buy_score %s: %s", stock_id, exc)
         return None
+
+    max_score = result.get("max_score")
+    if not max_score or result.get("eligible_count", 0) == 0:
+        logger.info(
+            "buy_score %s: no analyzable data (max_score=%s, eligible=%s) — skip",
+            stock_id, max_score, result.get("eligible_count"),
+        )
+        return None
+    return {"score": result.get("score"), "max_score": max_score}
 
 
 def batch_fetch_scores(
     stock_ids: list[str],
     on_batch: Callable[[dict[str, dict]], None] | None = None,
     batch_size: int = 50,
+    token: str | None = None,
 ) -> dict[str, dict]:
-    """Fetch buy scores for all stocks sequentially with REQUEST_DELAY between calls.
+    """Compute buy scores for all stocks sequentially with REQUEST_DELAY pacing.
+
+    Quota-aware: on FinMindError (HTTP 402) the current progress is flushed via
+    on_batch, then the batch sleeps QUOTA_WAIT_S and resumes with the stocks not
+    yet scored — up to QUOTA_MAX_CYCLES cycles.
 
     on_batch: optional callback invoked with the accumulated scores dict every
-    batch_size stocks (and at the final stock) for incremental persistence.
+    batch_size successes (and at the end of each pass) for incremental persistence.
     """
     if not stock_ids:
         return {}
 
+    token = token if token is not None else FINMIND_TOKEN
     scores: dict[str, dict] = {}
     total = len(stock_ids)
-    for i, sid in enumerate(stock_ids):
-        result = fetch_buy_score(sid)
-        if result is not None:
-            scores[sid] = result
-        logger.info("buy_score %d/%d  ok=%d  id=%s", i + 1, total, len(scores), sid)
 
-        if on_batch is not None and ((i + 1) % batch_size == 0 or i == total - 1):
+    for cycle in range(1, QUOTA_MAX_CYCLES + 1):
+        pending = [sid for sid in stock_ids if sid not in scores]
+        if not pending:
+            break
+
+        if cycle > 1:
+            logger.info(
+                "buy_score cycle %d/%d: resuming %d unscored stocks",
+                cycle, QUOTA_MAX_CYCLES, len(pending),
+            )
+
+        quota_hit = False
+        for i, sid in enumerate(pending):
+            try:
+                result = fetch_buy_score(sid, token=token)
+            except FinMindError as exc:
+                logger.warning(
+                    "buy_score quota exhausted at %s (cycle %d, %d/%d scored): %s",
+                    sid, cycle, len(scores), total, exc,
+                )
+                quota_hit = True
+                break
+
+            if result is not None:
+                scores[sid] = result
+            logger.info("buy_score %d/%d  ok=%d  id=%s", i + 1, len(pending), len(scores), sid)
+
+            if on_batch is not None and (len(scores) % batch_size == 0 or i == len(pending) - 1):
+                on_batch(scores)
+
+            if i < len(pending) - 1:
+                time.sleep(REQUEST_DELAY)
+
+        # Flush whatever we have at the end of this pass.
+        if on_batch is not None:
             on_batch(scores)
 
-        if i < total - 1:
-            time.sleep(REQUEST_DELAY)
+        if not quota_hit:
+            # Full pass completed; any remaining stocks are non-quota failures
+            # (shown as N/A) and are not retried.
+            break
+
+        if len([sid for sid in stock_ids if sid not in scores]) == 0:
+            break
+
+        logger.info(
+            "buy_score: quota wait %.0fs before resuming (cycle %d/%d, %d/%d scored)",
+            QUOTA_WAIT_S, cycle, QUOTA_MAX_CYCLES, len(scores), total,
+        )
+        time.sleep(QUOTA_WAIT_S)
+
+    logger.info("batch_fetch_scores done: %d/%d stocks scored", len(scores), total)
     return scores
 
 

@@ -1,8 +1,12 @@
 requests==2.31.0
 FinMind==1.9.10
+pandas>=2.2
+numpy
 tqdm
 apscheduler==3.10.4
 sqlalchemy==2.0.30
 yfinance
 pytest==8.2.0
 pytest-mock==3.14.0
+# lxml only needed if BUY_SCORE_GOODINFO_ENABLED=true (Goodinfo scraping, off by default)
+# lxml

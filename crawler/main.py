@@ -42,6 +42,12 @@ STORAGE_WARN_PCT = float(os.getenv("STORAGE_WARN_PCT", "70.0"))
 STORAGE_PROTECT_PCT = float(os.getenv("STORAGE_PROTECT_PCT", "80.0"))
 STORAGE_EMERGENCY_PCT = float(os.getenv("STORAGE_EMERGENCY_PCT", "90.0"))
 
+# On-demand score refresh: backend writes FORCE_FLAG; crawler runs a forced
+# score_job and writes PROGRESS_FLAG while in progress (backend reports fetching).
+SCORES_DIR = Path(os.getenv("SCORES_DIR", "/app/data/buy_scores"))
+FORCE_REFRESH_FLAG = SCORES_DIR / ".force_refresh"
+SCORING_IN_PROGRESS_FLAG = SCORES_DIR / ".scoring_in_progress"
+
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 Session = sessionmaker(bind=engine)
 
@@ -241,18 +247,22 @@ def vacuum_job() -> None:
         logger.warning("VACUUM failed: %s", exc)
 
 
-def score_job() -> None:
-    """Fetch buy scores for the top-480 stocks by volume, writing to JSON cache.
+def score_job(force: bool = False) -> None:
+    """Compute buy scores for the top-480 stocks by volume, writing to JSON cache.
 
     Queries the most recent date with actual trading data (not today) so the job
     works correctly when run at 03:00 on the 1st — trading data for that calendar
-    day does not exist yet. Pre-loads today's existing JSON and skips already-scored
-    stocks so an interrupted run resumes from where it left off. Writes partial
-    results every 50 stocks so progress is preserved even if the job is interrupted.
+    day does not exist yet.
+
+    force=False (monthly / resume): pre-loads today's existing JSON and skips
+    already-scored stocks so an interrupted run resumes from where it left off.
+    force=True (manual refresh): re-computes every stock, merging fresh results
+    over the existing file so cards keep their previous value until replaced
+    (no N/A flash). Writes partial results every 50 stocks.
     """
     now = datetime.now(tz=TZ_TAIPEI)
     today = now.strftime("%Y-%m-%d")
-    logger.info("score_job started at %s", now.isoformat())
+    logger.info("score_job started at %s (force=%s)", now.isoformat(), force)
 
     with Session() as session:
         trade_date_row = session.execute(
@@ -284,20 +294,24 @@ def score_job() -> None:
 
     logger.info("score_job: using trade_date=%s, run_date=%s", trade_date, today)
 
-    # Skip stocks already scored in today's JSON (handles interrupted runs)
+    # Base = today's existing JSON. force re-fetches everything (merging over the
+    # base so cards keep their prior value); otherwise skip already-scored stocks.
     existing_scores = load_scores_for_date(today)
     if existing_scores:
         logger.info("score_job: pre-loaded %d existing scores for %s", len(existing_scores), today)
 
-    stock_ids = [sid for sid in all_stock_ids if sid not in existing_scores]
-    if not stock_ids:
-        logger.info("score_job: all %d stocks already scored for %s, done", len(all_stock_ids), today)
-        return
-
-    logger.info(
-        "score_job: fetching %d/%d stocks (skipping %d already scored)",
-        len(stock_ids), len(all_stock_ids), len(existing_scores),
-    )
+    if force:
+        stock_ids = all_stock_ids
+        logger.info("score_job: force refresh — recomputing all %d stocks", len(all_stock_ids))
+    else:
+        stock_ids = [sid for sid in all_stock_ids if sid not in existing_scores]
+        if not stock_ids:
+            logger.info("score_job: all %d stocks already scored for %s, done", len(all_stock_ids), today)
+            return
+        logger.info(
+            "score_job: fetching %d/%d stocks (skipping %d already scored)",
+            len(stock_ids), len(all_stock_ids), len(existing_scores),
+        )
 
     def _write_partial(accumulated: dict) -> None:
         merged = {**existing_scores, **accumulated}
@@ -311,6 +325,30 @@ def score_job() -> None:
     merged_scores = {**existing_scores, **new_scores}
     write_scores(merged_scores, today)
     logger.info("score_job done: %d/%d stocks scored", len(merged_scores), len(all_stock_ids))
+
+
+def force_refresh_watch_job() -> None:
+    """Detect a backend-requested force refresh and run a forced score_job.
+
+    Backend writes FORCE_REFRESH_FLAG via GET /api/scores?force=true. We consume
+    it immediately (so triggers during a long run don't queue), mark progress via
+    SCORING_IN_PROGRESS_FLAG (backend reports fetching=true), then run the job.
+    APScheduler max_instances=1 prevents overlapping runs.
+    """
+    if not FORCE_REFRESH_FLAG.exists():
+        return
+    try:
+        SCORES_DIR.mkdir(parents=True, exist_ok=True)
+        SCORING_IN_PROGRESS_FLAG.write_text(
+            datetime.now(tz=TZ_TAIPEI).isoformat(), encoding="utf-8"
+        )
+        FORCE_REFRESH_FLAG.unlink(missing_ok=True)  # consume the request
+        logger.info("force_refresh: flag detected, running forced score_job")
+        score_job(force=True)
+    except Exception as exc:
+        logger.error("force_refresh_watch_job failed: %s", exc)
+    finally:
+        SCORING_IN_PROGRESS_FLAG.unlink(missing_ok=True)
 
 
 def prune_old_stock_ranks(keep_days: int = 7) -> None:
@@ -431,6 +469,17 @@ if __name__ == "__main__":
         minute=0,
         id="monthly_vacuum",
         misfire_grace_time=86400,
+    )
+
+    # 每分鐘檢查 backend 是否請求手動刷新評分（force refresh 旗標檔）
+    scheduler.add_job(
+        force_refresh_watch_job,
+        trigger="cron",
+        minute="*",
+        id="force_refresh_watch",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=30,
     )
 
     logger.info("Crawler scheduler started. Market hours: 09:00-13:30, poll every 60s.")

@@ -37,9 +37,10 @@ services:
     environment:
       - DATABASE_URL=sqlite:////app/data/twse_heat.db
       - FINMIND_TOKEN=${FINMIND_TOKEN:-}
-      - STOCK_ANALYSIS_URL=${STOCK_ANALYSIS_URL:-http://host.docker.internal:18000}
       - SCORES_DIR=/app/data/buy_scores
       - SCORE_CANDIDATE_LIMIT=${SCORE_CANDIDATE_LIMIT:-480}
+      - BUY_SCORE_QUOTA_WAIT_S=${BUY_SCORE_QUOTA_WAIT_S:-3600}
+      - BUY_SCORE_QUOTA_MAX_CYCLES=${BUY_SCORE_QUOTA_MAX_CYCLES:-24}
     logging:
       driver: json-file
       options:

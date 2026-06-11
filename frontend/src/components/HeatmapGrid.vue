@@ -452,28 +452,45 @@ function clearSearch() {
 
 /* ── 手機直屏：字體放大（覆蓋 StockCell 的 scoped 字體大小）── */
 
-/* 2x2 / 2x3：200% 方便老花眼閱讀 */
+/* 2x2 / 2x3：放大方便老花眼閱讀（字級略縮，確保 3-4 字名稱完整顯示） */
 @media (max-width: 768px) {
   .stock-grid:not([data-density="3x3"]) :deep(.cell-rank)   { font-size: 1.16rem; }
   .stock-grid:not([data-density="3x3"]) :deep(.cell-sector) { font-size: 1.0rem;  }
   .stock-grid:not([data-density="3x3"]) :deep(.cell-code)   { font-size: 1.24rem; }
   .stock-grid:not([data-density="3x3"]) :deep(.cell-price)  { font-size: 1.36rem; }
-  .stock-grid:not([data-density="3x3"]) :deep(.cell-name)   { font-size: 1.9rem;  }
+  .stock-grid:not([data-density="3x3"]) :deep(.cell-name)   { font-size: 1.45rem; }
   .stock-grid:not([data-density="3x3"]) :deep(.cell-score)  { font-size: 1.16rem; }
   .stock-grid:not([data-density="3x3"]) :deep(.cell-value)  { font-size: 1.24rem; }
   .stock-grid:not([data-density="3x3"]) :deep(.cell-pct)    { font-size: 1.56rem; }
 }
 
-/* 3x3：150%（密度較高，適度放大即可） */
+/* 3x3：密度較高，適度放大即可 */
 @media (max-width: 768px) {
   .stock-grid[data-density="3x3"] :deep(.cell-rank)   { font-size: 0.87rem; }
   .stock-grid[data-density="3x3"] :deep(.cell-sector) { font-size: 0.75rem; }
   .stock-grid[data-density="3x3"] :deep(.cell-code)   { font-size: 0.93rem; }
   .stock-grid[data-density="3x3"] :deep(.cell-price)  { font-size: 1.02rem; }
-  .stock-grid[data-density="3x3"] :deep(.cell-name)   { font-size: 1.43rem; }
+  .stock-grid[data-density="3x3"] :deep(.cell-name)   { font-size: 1.12rem; }
   .stock-grid[data-density="3x3"] :deep(.cell-score)  { font-size: 0.87rem; }
   .stock-grid[data-density="3x3"] :deep(.cell-value)  { font-size: 0.93rem; }
   .stock-grid[data-density="3x3"] :deep(.cell-pct)    { font-size: 1.17rem; }
+}
+
+/* 名稱完整顯示：手機改為最多兩行換行，不再單行裁切（避免第2/3字看不到） */
+@media (max-width: 768px) {
+  .stock-grid :deep(.cell-name) {
+    flex-wrap: wrap;
+    align-content: center;
+    line-height: 1.12;
+  }
+  .stock-grid :deep(.cell-name-text) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
 
 /* ── 真手機斷點：觸控導向佈局 ── */

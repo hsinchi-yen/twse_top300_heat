@@ -96,16 +96,19 @@ Twse_Top100_Heat/
 │       ├── stocks.py         # GET /api/stocks/top100
 │       ├── sectors.py
 │       ├── etf.py
-│       └── scores.py         # GET /api/scores（header token）
+│       └── scores.py         # GET /api/scores（讀 JSON + force 旗標）
 ├── crawler/
-│   ├── main.py               # APScheduler：盤中/收盤/維護/月度評分
+│   ├── main.py               # APScheduler：盤中/收盤/維護/月度評分 + force 偵測
 │   ├── etf_main.py           # ETF 爬蟲 + etf_ranks 清理
 │   └── sources/
 │       ├── twse.py
 │       ├── tpex.py
 │       ├── yahoo.py          # 盤中即時報價 fallback
-│       ├── finmind.py
-│       └── buy_score.py      # 評分 fetch / write / prune
+│       ├── finmind.py        # 發行股數 / 類股（週轉率用）
+│       ├── finmind_client.py # FinMind 原始 API client（評分引擎用）
+│       ├── buy_score_engine.py # compute_buy_score（24 指標 + 排雷）
+│       ├── goodinfo_client.py  # Goodinfo 爬蟲（評分用，預設停用）
+│       └── buy_score.py      # 評分 batch（原生計算 + 額度續抓）/ write / prune
 └── Reference/
 ```
 
@@ -137,11 +140,16 @@ Twse_Top100_Heat/
 
 月度評分（每月 1 日 03:00）：
    Crawler score_job
-     → GET /api/stocks/{id}/buy_score × ≤ 480 次（間隔 1.2s）
-     → 代理 StockAnalysisDashBoard（不耗本專案 FinMind token）
+     → compute_buy_score(id) × ≤ 480 次（原生計算，直接打 FinMind，間隔 1.2s）
+     → 引擎 24 指標 + 排雷（移植自 StockAnalysisDashBoard，無 HTTP 代理）
+     → FinMind 額度耗盡 → 寫 partial、等 1h、只續抓未完成者（最多 24 輪）
      → 寫入 /app/data/buy_scores/YYYY-MM-DD.json（原子切換）
      → 保留最近 7 天檔案
-     → 寫入 /app/data/metrics/YYYY-MM-DD.json（token 成本指標）
+
+手動強制刷新：
+   Frontend ScoreRefreshBtn → GET /api/scores?force=true
+     → backend 寫旗標 buy_scores/.force_refresh
+     → crawler 每分鐘偵測 → 寫 .scoring_in_progress → score_job(force=True)
 ```
 
 ---
@@ -179,11 +187,11 @@ Twse_Top100_Heat/
 
 ### `GET /api/scores`
 
-Token 必須透過 **HTTP header** 傳遞，禁止放在 query string。
+評分由 crawler 原生計算（FinMind token 在 crawler 端的 `FINMIND_TOKEN`）。
+backend 只讀取共享 JSON 並回傳；`X-FinMind-Token` header 可帶但會被忽略。
 
 ```http
 GET /api/scores
-X-FinMind-Token: <your-token>
 ```
 
 Response:
@@ -200,10 +208,13 @@ Response:
 ```
 
 - 無資料時：`{"date": "", "scores": {}, "fetching": false}`
-- 背景抓取中：`{"date": "...", "scores": {...}, "fetching": true}`（回傳當前部分資料）
+- 評分進行中：`{"date": "...", "scores": {...}, "fetching": true}`（回傳當前部分資料）
+- `fetching` 依旗標檔判定：`.scoring_in_progress` 或 `.force_refresh` 存在時為 true
 
 Query params:
-- `force=true`：強制重新抓取（需同時提供 token header）；**不刪除舊檔**，直接原子覆寫
+- `force=true`：寫旗標檔 `buy_scores/.force_refresh`，由 crawler 偵測後重新計算全部股票
+  （**非阻塞**，不刪舊檔，crawler 逐步原子覆寫；前端輪詢 `/api/scores` 取得進度）。
+  已在計算中（`fetching=true`）時忽略。
 
 ---
 
@@ -272,42 +283,31 @@ ETF Crawler（crawler/etf_main.py）另有獨立 scheduler：
 
 | 問題 | 決策 | 原因 |
 |------|------|------|
-| 資料來源 | 代理 StockAnalysisDashBoard API | 評分邏輯已實作，不重複建置 |
-| 儲存方式 | JSON 檔案 `data/buy_scores/YYYY-MM-DD.json` | 不動 DB schema；原子切換（.tmp → rename） |
+| 資料來源 | **原生計算**（`compute_buy_score` 直接打 FinMind） | 移除跨專案 HTTP 依賴與其失敗點 |
+| 評分邏輯 | 24 指標 + 排雷，移植自 StockAnalysisDashBoard | 沿用既有邏輯，不重新發明 |
+| 計算位置 | crawler（已有 FinMind/排程/續跑邏輯） | backend 不加 pandas、不複製引擎 |
+| 儲存方式 | JSON 檔案 `data/buy_scores/YYYY-MM-DD.json`（僅存 `{score,max_score}`） | 不動 DB schema；原子切換（.tmp → rename） |
 | 計算時機 | **每月 1 日 03:00**（月更新） | 財報基礎分數；月更新即足夠 |
 | 候選池 | volume_rank ≤ `SCORE_CANDIDATE_LIMIT`（預設 480，硬上限 1000） | 可配置，防止無限擴張消耗 token |
-| Token 傳遞 | **X-FinMind-Token HTTP header**（禁止 query string） | 防止 token 出現在 URL / log |
-| 強制刷新 | 先產生新快取，再原子切換，**禁止先刪舊檔** | 保證舊資料在新資料完成前持續可用 |
-| 限速重試 | 指數退避：base_wait × 2^(retry-1)，上限 2 小時 | 避免全量重跑放大消耗 |
-| 部分進度 | 每 50 筆寫一次磁碟（原子切換）；中斷可續傳 | 不需從零開始 |
+| Token | crawler `FINMIND_TOKEN` env（禁止 query string / log） | 防止 token 出現在 URL / log |
+| 分時處理 | 每檔間 `BUY_SCORE_REQUEST_DELAY`；資料集間 `BUY_SCORE_FETCH_DELAY` | 降載，避免觸發 FinMind burst limiter |
+| 額度耗盡 | 402→`FinMindError`：寫 partial、等 `BUY_SCORE_QUOTA_WAIT_S`(1h)、只續抓未完成者、最多 24 輪 | 「token 用完一小時後繼續更新」 |
+| 強制刷新 | backend 寫旗標檔，crawler 偵測後 `force=True` 重算（merge over 現檔，不刪舊） | 非阻塞；舊資料持續可用、不閃 N/A |
+| 部分進度 | 每 50 筆寫一次磁碟（原子切換）；中斷/續跑跳過已完成 | 不需從零開始 |
+| 不存 0/24 | `eligible_count==0`（全失敗）→ 回 None（N/A）不落地 | 避免卡在誤導性 0/24 |
 | 評分顯示 | `股票名稱 - score/max_score`（如 `台積電 - 18/24`） | 最精簡，卡片空間有限 |
 | 無資料顯示 | `N/A` | 財報不完整或 API 失敗 |
-| 盤中顯示 | 顯示最新可用 JSON（今天 > 昨天 > 最近 7 天） | 不延誤頁面載入 |
+| Goodinfo | 預設停用（`BUY_SCORE_GOODINFO_ENABLED`） | 逐檔爬蟲易被封；只影響 1 評分 + 1 排雷 |
 | ETF 頁面 | 不顯示 | ETF 無個股財報，評分無意義 |
-
-### Token 成本指標
-
-每次評分批次完成後寫入 `/app/data/metrics/YYYY-MM-DD.json`：
-```json
-{
-  "date": "2026-05-20",
-  "attempted": 480,
-  "succeeded": 463,
-  "failed": 17,
-  "retries": 0,
-  "coverage": 0.965,
-  "elapsed_s": 612.3
-}
-```
 
 ### Success Criteria（買入評分）
 - [ ] 每月 1 日後，`data/buy_scores/YYYY-MM-DD.json` 包含 ≥ 50 支分數
 - [ ] `GET /api/scores` 回傳正確 JSON schema
-- [ ] Token 僅透過 `X-FinMind-Token` header 傳遞（測試強制驗證）
+- [ ] FinMind token 僅透過 crawler `FINMIND_TOKEN` env（不入 query string / log）
 - [ ] 強制刷新不刪除舊檔（`.tmp → rename` 原子切換）
-- [ ] 指數退避：連續 5 次非 200 → 等待 → 只重試未完成股票
+- [ ] 額度耗盡 → 寫 partial → 等待 → 只續抓未完成股票
 - [ ] 中斷後重跑可跳過已完成股票（部分進度持久化）
-- [ ] 每次批次寫出 metrics JSON
+- [ ] 全失敗（eligible_count==0）不落地為 0/24
 - [ ] 所有 pytest 與 vitest 測試通過
 
 ---
@@ -371,11 +371,14 @@ bash run_containers.sh
 
 | 變數 | 預設 | 說明 |
 |------|------|------|
-| `FINMIND_TOKEN` | `""` | FinMind token（傳入 crawler） |
-| `STOCK_ANALYSIS_URL` | `http://localhost:8502` | StockAnalysisDashBoard URL |
+| `FINMIND_TOKEN` | `""` | FinMind token（crawler 端，評分計算用） |
 | `SCORES_DIR` | `/app/data/buy_scores` | 評分 JSON 目錄 |
-| `METRICS_DIR` | `/app/data/metrics` | 成本指標目錄 |
 | `SCORE_CANDIDATE_LIMIT` | `480` | 評分候選池上限（硬上限 1000） |
+| `BUY_SCORE_REQUEST_DELAY` | `1.2` | 每檔評分間隔秒 |
+| `BUY_SCORE_FETCH_DELAY` | `0.4` | 引擎內每個 FinMind 資料集間隔秒 |
+| `BUY_SCORE_QUOTA_WAIT_S` | `3600` | 額度耗盡後續抓等待秒 |
+| `BUY_SCORE_QUOTA_MAX_CYCLES` | `24` | 額度續抓最多輪數 |
+| `BUY_SCORE_GOODINFO_ENABLED` | `false` | 啟用 Goodinfo 外資/質押爬蟲（封鎖風險，預設關） |
 | `ALLOWED_ORIGINS` | `""` (等同 `*`) | CORS 白名單，逗號分隔 |
 | `ETF_KEEP_DAYS` | `90` | ETF 歷史保留天數 |
 | `STORAGE_WARN_PCT` | `70.0` | 儲存告警閾值 (%) |
@@ -429,7 +432,7 @@ const props = defineProps({
 - **Always:**
   - 跑 `pytest` + `vitest` 通過後才 commit
   - API response 維持已定義的 contract shape
-  - Token 只透過 `X-FinMind-Token` header 傳遞，禁止 query string
+  - FinMind token 只透過 crawler `FINMIND_TOKEN` env，禁止 query string / log
   - TWSE/TPEX API 請求加 1-3 秒隨機 delay
   - 評分強制刷新用 `.tmp → rename` 原子切換，不先刪舊檔
 

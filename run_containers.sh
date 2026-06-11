@@ -16,7 +16,6 @@ docker run -d \
   -v ${DATA_DIR}:/app/data \
   -e DATABASE_URL="sqlite:////app/data/twse_heat.db" \
   -e SCORES_DIR="/app/data/buy_scores" \
-  -e STOCK_ANALYSIS_URL="http://localhost:8502" \
   -e ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-}" \
   ${LOG_OPTS} \
   --restart unless-stopped \
@@ -48,9 +47,10 @@ docker run -d \
   -v ${DATA_DIR}:/app/data \
   -e DATABASE_URL="sqlite:////app/data/twse_heat.db" \
   -e FINMIND_TOKEN="${FINMIND_TOKEN:-}" \
-  -e STOCK_ANALYSIS_URL="http://localhost:8502" \
   -e SCORES_DIR="/app/data/buy_scores" \
   -e SCORE_CANDIDATE_LIMIT="${SCORE_CANDIDATE_LIMIT:-480}" \
+  -e BUY_SCORE_QUOTA_WAIT_S="${BUY_SCORE_QUOTA_WAIT_S:-3600}" \
+  -e BUY_SCORE_QUOTA_MAX_CYCLES="${BUY_SCORE_QUOTA_MAX_CYCLES:-24}" \
   ${LOG_OPTS} \
   --restart unless-stopped \
   twse_top100_heat-crawler:latest
