@@ -12,13 +12,15 @@ Uses the default mattpocock/skills label vocabulary (no overrides). See `docs/ag
 
 ### Domain docs
 
-Single-context repo — `CLAUDE.md` (key rules) + `SPEC.md` (full spec) + `improve.md` (long-run stability conditions) + `docs/adr/`. See `docs/agents/domain.md`.
+Single-context repo — `CLAUDE.md` (key rules) + `SPEC.md` (full spec) + `improve.md` (long-run stability notes). See `docs/agents/domain.md`.
 
 ## Critical Knowledge
 
 Read `CLAUDE.md` first for key architecture decisions and rules before modifying any file.
+
 Key invariants:
-- Token → `X-FinMind-Token` header only, never query string
-- Score refresh → atomic `.tmp → rename`, never delete-then-write
-- Frontend always fetches `mode=volume&limit=360`; turnover re-sort is frontend-only
-- See `SPEC.md` for full API contract and environment variables
+- Buy-score computation lives in `crawler/` and uses `FINMIND_TOKEN` env only; backend `GET /api/scores` only serves JSON + force-refresh flags
+- Score refresh writes via `.tmp -> rename`; never delete the current cache first
+- Frontend stock view always fetches `/api/stocks/top100?mode=volume&limit=480`; turnover and buy-score ordering are frontend-only over that same display pool
+- ETF mode is separate and fetches `/api/etf?sort_by=turnover|asset_scale&limit=300`
+- See `SPEC.md` for the current API contract, schedules, and environment variables
