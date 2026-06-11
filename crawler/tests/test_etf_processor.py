@@ -2,7 +2,7 @@
 test_etf_processor.py — Unit tests for ETF classification, ranking, and merge logic
 
 Tests:
-  - classify_etf_type: all 5 categories correct
+  - classify_etf_type: 8-type TWSE taxonomy (反向/槓桿/貨幣/債券/期貨/多資產/國外股/國內股)
   - compute_etf_ranks: turnover + asset_scale ranks assigned correctly
   - merge_etf_data: turnover_rate formula, premium/discount calc, None-safety
 """
@@ -17,41 +17,42 @@ from etf_processor import classify_etf_type, compute_etf_ranks, merge_etf_data, 
 
 class TestClassifyEtfType:
     def test_stock_type_default(self):
-        assert classify_etf_type("0050", "元大台灣50") == "股票型"
+        assert classify_etf_type("0050", "元大台灣50") == "國內股"
 
     def test_stock_type_numeric_id(self):
-        assert classify_etf_type("006208", "富邦台灣50") == "股票型"
+        assert classify_etf_type("006208", "富邦台灣50") == "國內股"
 
     def test_bond_type_by_id_suffix_B(self):
-        assert classify_etf_type("00679B", "元大美債20年") == "債券型"
+        assert classify_etf_type("00679B", "元大美債20年") == "債券"
 
     def test_bond_type_by_name(self):
-        assert classify_etf_type("00937B", "台新ESG投資級債") == "債券型"
+        assert classify_etf_type("00937B", "台新ESG投資級債") == "債券"
 
     def test_commodity_type_by_id_suffix_U(self):
-        assert classify_etf_type("00635U", "元大S&P黃金") == "商品型"
+        assert classify_etf_type("00635U", "元大S&P黃金") == "期貨"
 
     def test_commodity_type_by_name_keyword(self):
-        assert classify_etf_type("XYZZ", "某某原油ETF") == "商品型"
+        assert classify_etf_type("XYZZ", "某某原油ETF") == "期貨"
 
     def test_leveraged_by_id_suffix_L(self):
-        assert classify_etf_type("00631L", "元大台灣50正2") == "槓桿/反向"
+        assert classify_etf_type("00631L", "元大台灣50正2") == "槓桿"
 
     def test_inverse_by_id_suffix_R(self):
-        assert classify_etf_type("00632R", "元大台灣50反1") == "槓桿/反向"
+        assert classify_etf_type("00632R", "元大台灣50反1") == "反向"
 
     def test_leveraged_by_name_keyword(self):
-        assert classify_etf_type("XXXX", "某某槓桿型基金") == "槓桿/反向"
+        assert classify_etf_type("XXXX", "某某槓桿型基金") == "槓桿"
 
     def test_inverse_by_name_keyword(self):
-        assert classify_etf_type("XXXX", "反向1倍ETF") == "槓桿/反向"
+        assert classify_etf_type("XXXX", "反向1倍ETF") == "反向"
 
     def test_money_market_by_name(self):
-        assert classify_etf_type("00864B", "中信貨幣市場型ETF") == "貨幣市場"
+        # 貨幣 name check runs before the B-suffix bond rule → 貨幣 wins
+        assert classify_etf_type("00864B", "中信貨幣市場型ETF") == "貨幣"
 
     def test_leveraged_takes_priority_over_bond(self):
-        # ID ends with L but name contains 債 — 槓桿/反向 should win
-        assert classify_etf_type("00XYL", "某某債券正2ETF") == "槓桿/反向"
+        # ID ends with L but name contains 債 — 槓桿 should win
+        assert classify_etf_type("00XYL", "某某債券正2ETF") == "槓桿"
 
 
 class TestComputeColorTier:
@@ -155,8 +156,8 @@ class TestMergeEtfData:
     def test_etf_type_classified(self):
         result = merge_etf_data(self._daily(), {}, {}, {})
         by_id = {r["etf_id"]: r for r in result}
-        assert by_id["0050"]["etf_type"]   == "股票型"
-        assert by_id["00679B"]["etf_type"] == "債券型"
+        assert by_id["0050"]["etf_type"]   == "國內股"
+        assert by_id["00679B"]["etf_type"] == "債券"
 
     def test_color_tier_assigned(self):
         result = merge_etf_data(self._daily(), {}, {}, {})

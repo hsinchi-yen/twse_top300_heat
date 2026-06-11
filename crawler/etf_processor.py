@@ -231,7 +231,7 @@ def compute_etf_ranks(records: list[dict]) -> list[dict]:
         key=lambda r: (
             r["turnover_rate"] is None,
             -(r["turnover_rate"] or 0),
-            -(r["volume"] or 0),      # fallback: volume descending
+            -(r.get("volume") or 0),  # fallback: volume descending
         )
     )
     for i, r in enumerate(by_turnover, 1):
@@ -242,7 +242,7 @@ def compute_etf_ranks(records: list[dict]) -> list[dict]:
         key=lambda r: (
             r["asset_scale"] is None,
             -(r["asset_scale"] or 0),
-            -(r["volume"] or 0),      # fallback: volume descending
+            -(r.get("volume") or 0),  # fallback: volume descending
         )
     )
     for i, r in enumerate(by_scale, 1):
