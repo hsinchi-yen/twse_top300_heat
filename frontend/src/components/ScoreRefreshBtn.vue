@@ -40,18 +40,18 @@ function onClick() {
   width: 28px;
   height: 28px;
   padding: 0;
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  background: var(--toggle-btn-muted-bg);
+  border: 1px solid var(--border-default);
   border-radius: 5px;
-  color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--toggle-btn-muted-color);
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
   flex-shrink: 0;
 }
 
 .score-refresh-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--toggle-btn-hover-bg);
+  border-color: var(--border-strong);
   color: var(--accent);
 }
 

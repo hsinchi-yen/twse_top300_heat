@@ -110,7 +110,7 @@ function clearToken() {
   padding: 10px 12px;
   width: 280px;
   z-index: 100;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  box-shadow: var(--token-panel-shadow);
 }
 
 .token-panel-header {

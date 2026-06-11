@@ -93,8 +93,8 @@ const { isMobile, isTablet } = useBreakpoint()
   padding: 0.3rem 1rem;
   border: 1px solid var(--border-default);
   border-radius: 4px;
-  background: var(--border-subtle);
-  color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--toggle-btn-muted-bg);
+  color: var(--toggle-btn-muted-color);
   font-size: 0.75rem;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-weight: 600;
@@ -108,60 +108,60 @@ const { isMobile, isTablet } = useBreakpoint()
 .toggle-btn:hover {
   border-color: var(--border-strong);
   color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 15%, transparent);
+  background: var(--toggle-btn-hover-bg);
+  box-shadow: 0 0 10px var(--toggle-btn-hover-shadow);
 }
 
 .toggle-btn.active {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: var(--toggle-btn-active-bg);
   border-color: var(--accent);
   color: var(--accent);
-  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 35%, transparent),
-              inset 0 0 8px color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: 0 0 14px var(--toggle-btn-active-shadow),
+              inset 0 0 8px var(--toggle-btn-hover-bg);
 }
 
 /* ETF button — amber accent */
 .toggle-btn--etf {
   border-color: color-mix(in srgb, var(--accent-etf) 20%, transparent);
-  color: color-mix(in srgb, var(--accent-etf) 45%, transparent);
-  background: color-mix(in srgb, var(--accent-etf) 4%, transparent);
+  color: var(--toggle-etf-muted-color);
+  background: var(--toggle-etf-muted-bg);
 }
 
 .toggle-btn--etf:hover {
   border-color: color-mix(in srgb, var(--accent-etf) 55%, transparent);
   color: var(--accent-etf);
-  background: color-mix(in srgb, var(--accent-etf) 8%, transparent);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--accent-etf) 18%, transparent);
+  background: var(--toggle-etf-hover-bg);
+  box-shadow: 0 0 10px var(--toggle-etf-hover-shadow);
 }
 
 .toggle-btn--etf.active {
-  background: color-mix(in srgb, var(--accent-etf) 12%, transparent);
+  background: var(--toggle-etf-active-bg);
   border-color: var(--accent-etf);
   color: var(--accent-etf);
-  box-shadow: 0 0 14px color-mix(in srgb, var(--accent-etf) 38%, transparent),
-              inset 0 0 8px color-mix(in srgb, var(--accent-etf) 8%, transparent);
+  box-shadow: 0 0 14px var(--toggle-etf-active-shadow),
+              inset 0 0 8px var(--toggle-etf-hover-bg);
 }
 
 /* 買進評分 button — score accent */
 .toggle-btn--score {
   border-color: color-mix(in srgb, var(--accent-score) 20%, transparent);
-  color: color-mix(in srgb, var(--accent-score) 45%, transparent);
-  background: color-mix(in srgb, var(--accent-score) 4%, transparent);
+  color: var(--toggle-score-muted-color);
+  background: var(--toggle-score-muted-bg);
 }
 
 .toggle-btn--score:hover {
   border-color: color-mix(in srgb, var(--accent-score) 55%, transparent);
   color: var(--accent-score);
-  background: color-mix(in srgb, var(--accent-score) 8%, transparent);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--accent-score) 18%, transparent);
+  background: var(--toggle-score-hover-bg);
+  box-shadow: 0 0 10px var(--toggle-score-hover-shadow);
 }
 
 .toggle-btn--score.active {
-  background: color-mix(in srgb, var(--accent-score) 12%, transparent);
+  background: var(--toggle-score-active-bg);
   border-color: var(--accent-score);
   color: var(--accent-score);
-  box-shadow: 0 0 14px color-mix(in srgb, var(--accent-score) 38%, transparent),
-              inset 0 0 8px color-mix(in srgb, var(--accent-score) 8%, transparent);
+  box-shadow: 0 0 14px var(--toggle-score-active-shadow),
+              inset 0 0 8px var(--toggle-score-hover-bg);
 }
 
 .divider {
@@ -187,7 +187,7 @@ const { isMobile, isTablet } = useBreakpoint()
   border-radius: 3px;
   border: none;
   background: transparent;
-  color: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: var(--size-btn-muted-color);
   font-size: 0.68rem;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-weight: 600;
@@ -198,26 +198,26 @@ const { isMobile, isTablet } = useBreakpoint()
 }
 .size-btn:hover {
   color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: var(--size-btn-hover-bg);
 }
 .size-btn.active {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: var(--size-btn-active-bg);
   color: var(--accent);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 25%, transparent);
+  box-shadow: 0 0 6px var(--size-btn-active-shadow);
 }
 
 /* Tablet density group uses ETF accent to differentiate from desktop grid-size */
 .tablet-density-group .size-btn {
-  color: color-mix(in srgb, var(--accent-etf) 38%, transparent);
+  color: var(--tablet-size-btn-muted-color);
 }
 .tablet-density-group .size-btn:hover {
   color: var(--accent-etf);
-  background: color-mix(in srgb, var(--accent-etf) 10%, transparent);
+  background: var(--tablet-size-btn-hover-bg);
 }
 .tablet-density-group .size-btn.active {
-  background: color-mix(in srgb, var(--accent-etf) 16%, transparent);
+  background: var(--tablet-size-btn-active-bg);
   color: var(--accent-etf);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--accent-etf) 25%, transparent);
+  box-shadow: 0 0 6px var(--tablet-size-btn-active-shadow);
 }
 
 @media (max-width: 1366px), (max-height: 768px) {

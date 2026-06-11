@@ -50,13 +50,13 @@ const cellStyle = computed(() => {
   if (props.highlighted) {
     return {
       backgroundColor: tierToColor(tier),
-      boxShadow: `inset 0 0 24px ${tierToGlow(tier)}, 0 0 28px 8px color-mix(in srgb, var(--accent) 80%, transparent)`,
+      boxShadow: `inset 0 0 24px ${tierToGlow(tier)}, 0 0 28px 8px var(--cell-highlight-ring)`,
       borderColor: 'var(--accent)',
     }
   }
   return {
     backgroundColor: tierToColor(tier),
-    boxShadow: `inset 0 0 24px ${tierToGlow(tier)}, 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent)`,
+    boxShadow: `inset 0 0 24px ${tierToGlow(tier)}, 0 0 1px var(--cell-idle-ring)`,
   }
 })
 
@@ -136,8 +136,8 @@ function formatPrice(p) {
     0deg,
     transparent,
     transparent 3px,
-    rgba(0, 0, 0, 0.08) 3px,
-    rgba(0, 0, 0, 0.08) 4px
+    var(--cell-scanline) 3px,
+    var(--cell-scanline) 4px
   );
   pointer-events: none;
   opacity: 0;

@@ -4,10 +4,16 @@
  */
 
 :root {
+  --font-sans: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Inter", "Noto Sans TC", "Segoe UI", sans-serif;
+
   /* ── Layout ── */
   --app-bg: #050810;
   --surface: #0a1420;
   --surface-raised: #0d1928;
+  --app-bg-image:
+    radial-gradient(var(--border-subtle) 1px, transparent 1px);
+  --app-bg-size: 28px 28px;
+  --app-bg-attachment: scroll;
 
   /* ── Typography ── */
   --text-primary: #c8d8e8;
@@ -35,6 +41,7 @@
   --title-mid: #7c4dff;
   --title-to: #e040fb;
   --title-shadow: rgba(0,229,255,0.4);
+  --title-gloss: rgba(255,255,255,0.0);
 
   /* ── Badges ── */
   --badge-open-bg: rgba(0,230,120,0.1);
@@ -124,6 +131,9 @@
   --cell-hover-sweep: rgba(0,229,255,0.07);
   --cell-empty-bg: rgba(0,255,255,0.02);
   --cell-empty-border: rgba(0,255,255,0.08);
+  --cell-scanline: rgba(0, 0, 0, 0.08);
+  --cell-idle-ring: color-mix(in srgb, var(--accent) 8%, transparent);
+  --cell-highlight-ring: color-mix(in srgb, var(--accent) 80%, transparent);
 
   /* ── ETF cell chrome ── */
   --etf-cell-rank-color: #ffb300;
@@ -140,6 +150,8 @@
   --etf-cell-hover-sweep: rgba(255,179,0,0.07);
   --etf-cell-empty-bg: rgba(255,179,0,0.02);
   --etf-cell-empty-border: rgba(255,179,0,0.08);
+  --etf-cell-scanline: rgba(0, 0, 0, 0.08);
+  --etf-cell-idle-ring: rgba(255,179,0,0.08);
   --etf-tooltip-bg: rgba(12,9,2,0.96);
   --etf-tooltip-border: rgba(255,179,0,0.35);
   --etf-tooltip-shadow: rgba(255,179,0,0.12);
@@ -174,6 +186,16 @@
   --ctrl-error-color: #ff4444;
   --ctrl-state-color: #444;
   --ctrl-loading-dot: #00e5ff;
+  --toggle-btn-muted-bg: var(--border-subtle);
+  --toggle-btn-muted-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  --toggle-btn-hover-bg: color-mix(in srgb, var(--accent) 8%, transparent);
+  --toggle-btn-hover-shadow: color-mix(in srgb, var(--accent) 15%, transparent);
+  --toggle-btn-active-bg: color-mix(in srgb, var(--accent) 12%, transparent);
+  --toggle-btn-active-shadow: color-mix(in srgb, var(--accent) 35%, transparent);
+  --size-btn-muted-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  --size-btn-hover-bg: color-mix(in srgb, var(--accent) 10%, transparent);
+  --size-btn-active-bg: color-mix(in srgb, var(--accent) 16%, transparent);
+  --size-btn-active-shadow: color-mix(in srgb, var(--accent) 25%, transparent);
 
   /* ── ETF controls ── */
   --etf-ctrl-page-btn-bg: rgba(255,179,0,0.05);
@@ -210,6 +232,22 @@
   --etf-sort-btn-active-shadow: rgba(255,179,0,0.25);
   --etf-info-trigger-color: rgba(255,179,0,0.45);
   --etf-info-trigger-border: rgba(255,179,0,0.25);
+  --toggle-etf-muted-color: color-mix(in srgb, var(--accent-etf) 45%, transparent);
+  --toggle-etf-muted-bg: color-mix(in srgb, var(--accent-etf) 4%, transparent);
+  --toggle-etf-hover-bg: color-mix(in srgb, var(--accent-etf) 8%, transparent);
+  --toggle-etf-hover-shadow: color-mix(in srgb, var(--accent-etf) 18%, transparent);
+  --toggle-etf-active-bg: color-mix(in srgb, var(--accent-etf) 12%, transparent);
+  --toggle-etf-active-shadow: color-mix(in srgb, var(--accent-etf) 38%, transparent);
+  --toggle-score-muted-color: color-mix(in srgb, var(--accent-score) 45%, transparent);
+  --toggle-score-muted-bg: color-mix(in srgb, var(--accent-score) 4%, transparent);
+  --toggle-score-hover-bg: color-mix(in srgb, var(--accent-score) 8%, transparent);
+  --toggle-score-hover-shadow: color-mix(in srgb, var(--accent-score) 18%, transparent);
+  --toggle-score-active-bg: color-mix(in srgb, var(--accent-score) 12%, transparent);
+  --toggle-score-active-shadow: color-mix(in srgb, var(--accent-score) 38%, transparent);
+  --tablet-size-btn-muted-color: color-mix(in srgb, var(--accent-etf) 38%, transparent);
+  --tablet-size-btn-hover-bg: color-mix(in srgb, var(--accent-etf) 10%, transparent);
+  --tablet-size-btn-active-bg: color-mix(in srgb, var(--accent-etf) 16%, transparent);
+  --tablet-size-btn-active-shadow: color-mix(in srgb, var(--accent-etf) 25%, transparent);
 
   /* ── Token settings ── */
   --token-btn-border: #444;
@@ -225,6 +263,12 @@
   --token-save-color: #4caf8a;
   --token-clear-bg: #3a2a2a;
   --token-clear-color: #cf6679;
+  --token-panel-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  --theme-toggle-bg: rgba(255,255,255,0.02);
+  --theme-toggle-border: var(--border-default);
+  --theme-toggle-shadow: rgba(0,0,0,0);
+  --theme-toggle-hover-bg: rgba(255,255,255,0.06);
+  --theme-toggle-hover-border: var(--border-strong);
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -232,226 +276,272 @@
    ═══════════════════════════════════════════════════════ */
 html[data-theme="light"] {
   /* ── Layout ── */
-  --app-bg: #f5f5f7;
-  --surface: #ffffff;
-  --surface-raised: #fafafa;
+  --app-bg: #edf1f6;
+  --surface: rgba(255,255,255,0.78);
+  --surface-raised: rgba(255,255,255,0.92);
+  --app-bg-image:
+    linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(255,255,255,0.0) 18%),
+    radial-gradient(circle at 18% 0%, rgba(115, 171, 255, 0.28) 0%, transparent 26%),
+    radial-gradient(circle at 85% 10%, rgba(164, 170, 255, 0.22) 0%, transparent 28%),
+    radial-gradient(circle at 50% 100%, rgba(255,255,255,0.92) 0%, transparent 34%),
+    linear-gradient(180deg, #f9fbff 0%, #eff3f8 42%, #eef2f7 100%);
+  --app-bg-size: auto;
+  --app-bg-attachment: fixed;
 
   /* ── Typography ── */
-  --text-primary: #1d1d1f;
-  --text-secondary: rgba(60,60,67,0.6);
-  --text-mono: rgba(60,60,67,0.5);
+  --text-primary: #10131a;
+  --text-secondary: rgba(45,52,66,0.72);
+  --text-mono: rgba(45,52,66,0.66);
 
   /* ── Accents ── */
-  --accent: #0071e3;
-  --accent-etf: #ff9f0a;
+  --accent: #0a66db;
+  --accent-etf: #d78216;
   --accent-score: #34c759;
 
   /* ── Borders ── */
-  --border-subtle: rgba(0,0,0,0.06);
-  --border-default: rgba(0,0,0,0.12);
-  --border-strong: rgba(0,113,227,0.35);
+  --border-subtle: rgba(76,91,118,0.08);
+  --border-default: rgba(84,99,126,0.16);
+  --border-strong: rgba(10,102,219,0.34);
 
   /* ── Topbar (frosted glass) ── */
-  --topbar-bg: rgba(255,255,255,0.88);
-  --topbar-border: rgba(0,0,0,0.1);
-  --topbar-shadow: rgba(0,0,0,0.06);
-  --topbar-blur: 20px;
+  --topbar-bg: linear-gradient(180deg, rgba(255,255,255,0.88) 0%, rgba(248,250,255,0.76) 100%);
+  --topbar-border: rgba(92,108,137,0.14);
+  --topbar-shadow: rgba(93,104,125,0.12);
+  --topbar-blur: 22px;
 
   /* ── Title gradient stops ── */
-  --title-from: #0071e3;
-  --title-mid: #5e5ce6;
-  --title-to: #bf5af2;
-  --title-shadow: rgba(0,113,227,0.3);
+  --title-from: #0a66db;
+  --title-mid: #5d73ff;
+  --title-to: #84b8ff;
+  --title-shadow: rgba(10,102,219,0.18);
+  --title-gloss: rgba(255,255,255,0.72);
 
   /* ── Badges ── */
-  --badge-open-bg: rgba(0,200,80,0.1);
-  --badge-open-color: #1a8a3a;
-  --badge-open-border: rgba(0,180,70,0.3);
-  --badge-closed-bg: rgba(200,0,0,0.07);
-  --badge-closed-color: #c0392b;
-  --badge-closed-border: rgba(200,0,0,0.2);
-  --badge-date-bg: rgba(94,92,230,0.08);
-  --badge-date-color: #5e5ce6;
-  --badge-date-border: rgba(94,92,230,0.25);
-  --last-updated-color: rgba(0,0,0,0.38);
+  --badge-open-bg: rgba(32, 201, 120, 0.12);
+  --badge-open-color: #1d7f4d;
+  --badge-open-border: rgba(32, 201, 120, 0.28);
+  --badge-closed-bg: rgba(219, 60, 58, 0.09);
+  --badge-closed-color: #b44540;
+  --badge-closed-border: rgba(219, 60, 58, 0.22);
+  --badge-date-bg: rgba(93, 115, 255, 0.09);
+  --badge-date-color: #4b5fe0;
+  --badge-date-border: rgba(93, 115, 255, 0.22);
+  --last-updated-color: rgba(38,45,58,0.52);
 
   /* ── Price change ── */
-  --pct-up: #c0392b;
-  --pct-up-shadow: rgba(200,0,0,0.25);
-  --pct-down: #1a7a3a;
-  --pct-down-shadow: rgba(0,160,60,0.25);
-  --pct-flat: rgba(60,60,67,0.35);
+  --pct-up: #b44842;
+  --pct-up-shadow: rgba(180,72,66,0.16);
+  --pct-down: #20714d;
+  --pct-down-shadow: rgba(32,113,77,0.15);
+  --pct-flat: rgba(65,72,86,0.42);
 
   /* ── Scrollbar ── */
-  --scrollbar-from: #0071e3;
-  --scrollbar-to: #5e5ce6;
+  --scrollbar-from: #83aef1;
+  --scrollbar-to: #5d73ff;
 
   /* ── Stock heat tiers (pastel on white) ── */
-  --tier-dr-bg: #fff0f0;
-  --tier-dr-glow: rgba(200,0,0,0.10);
-  --tier-dr-border: rgba(200,0,0,0.22);
+  --tier-dr-bg: rgba(255, 238, 236, 0.9);
+  --tier-dr-glow: rgba(180,72,66,0.08);
+  --tier-dr-border: rgba(180,72,66,0.24);
 
-  --tier-lr-bg: #fff7f5;
-  --tier-lr-glow: rgba(200,60,60,0.07);
-  --tier-lr-border: rgba(200,60,60,0.15);
+  --tier-lr-bg: rgba(255, 245, 242, 0.92);
+  --tier-lr-glow: rgba(203,118,91,0.05);
+  --tier-lr-border: rgba(203,118,91,0.16);
 
-  --tier-nt-bg: #f5f7fa;
-  --tier-nt-glow: rgba(0,113,227,0.07);
-  --tier-nt-border: rgba(0,0,0,0.09);
+  --tier-nt-bg: rgba(250, 252, 255, 0.9);
+  --tier-nt-glow: rgba(10,102,219,0.04);
+  --tier-nt-border: rgba(101,116,145,0.14);
 
-  --tier-lg-bg: #f0fff6;
-  --tier-lg-glow: rgba(0,160,60,0.08);
-  --tier-lg-border: rgba(0,160,60,0.18);
+  --tier-lg-bg: rgba(241, 251, 245, 0.92);
+  --tier-lg-glow: rgba(32,113,77,0.06);
+  --tier-lg-border: rgba(32,113,77,0.18);
 
-  --tier-dg-bg: #e8ffe8;
-  --tier-dg-glow: rgba(0,140,50,0.12);
-  --tier-dg-border: rgba(0,140,50,0.25);
+  --tier-dg-bg: rgba(232, 248, 238, 0.94);
+  --tier-dg-glow: rgba(32,113,77,0.08);
+  --tier-dg-border: rgba(32,113,77,0.24);
 
   /* ── ETF heat tiers ── */
-  --etf-dr-bg: #fff3e0;
-  --etf-dr-glow: rgba(230,80,0,0.08);
-  --etf-dr-border: rgba(230,80,0,0.20);
+  --etf-dr-bg: rgba(255, 243, 228, 0.92);
+  --etf-dr-glow: rgba(215,130,22,0.06);
+  --etf-dr-border: rgba(215,130,22,0.18);
 
-  --etf-lr-bg: #fff8e1;
-  --etf-lr-glow: rgba(230,140,0,0.06);
-  --etf-lr-border: rgba(230,140,0,0.15);
+  --etf-lr-bg: rgba(255, 248, 235, 0.92);
+  --etf-lr-glow: rgba(215,130,22,0.05);
+  --etf-lr-border: rgba(215,130,22,0.14);
 
-  --etf-nt-bg: #fffde7;
-  --etf-nt-glow: rgba(200,150,0,0.05);
-  --etf-nt-border: rgba(180,130,0,0.12);
+  --etf-nt-bg: rgba(255, 252, 242, 0.94);
+  --etf-nt-glow: rgba(215,130,22,0.04);
+  --etf-nt-border: rgba(164,116,42,0.14);
 
-  --etf-lg-bg: #f1f8e9;
-  --etf-lg-glow: rgba(0,160,60,0.08);
-  --etf-lg-border: rgba(0,160,60,0.18);
+  --etf-lg-bg: rgba(241, 249, 238, 0.92);
+  --etf-lg-glow: rgba(32,113,77,0.06);
+  --etf-lg-border: rgba(32,113,77,0.16);
 
-  --etf-dg-bg: #e8f5e9;
-  --etf-dg-glow: rgba(0,140,50,0.12);
-  --etf-dg-border: rgba(0,140,50,0.25);
+  --etf-dg-bg: rgba(232, 244, 236, 0.94);
+  --etf-dg-glow: rgba(32,113,77,0.08);
+  --etf-dg-border: rgba(32,113,77,0.22);
 
   /* ── Sector block ── */
-  --sector-bg: rgba(0,0,0,0.02);
-  --sector-border: rgba(0,0,0,0.08);
-  --sector-name-color: #0071e3;
-  --sector-count-color: rgba(60,60,67,0.5);
+  --sector-bg: rgba(255,255,255,0.42);
+  --sector-border: rgba(90,102,128,0.08);
+  --sector-name-color: #285ea6;
+  --sector-count-color: rgba(57,65,80,0.54);
 
   /* ── Cell chrome ── */
-  --cell-rank-color: #0071e3;
-  --cell-rank-shadow: rgba(0,113,227,0.3);
-  --cell-sector-color: rgba(0,113,227,0.7);
-  --cell-sector-bg: rgba(0,113,227,0.06);
-  --cell-sector-border: rgba(0,113,227,0.15);
-  --cell-code-color: rgba(60,60,67,0.55);
-  --cell-price-color: rgba(29,29,31,0.75);
-  --cell-name-color: #1d1d1f;
-  --cell-name-shadow: rgba(0,0,0,0.1);
-  --cell-score-color: rgba(0,113,227,0.7);
-  --cell-value-color: rgba(29,29,31,0.7);
-  --cell-border-default: rgba(0,0,0,0.09);
-  --cell-hover-border: rgba(0,113,227,0.4);
-  --cell-hover-sweep: rgba(0,113,227,0.04);
-  --cell-empty-bg: rgba(0,0,0,0.02);
-  --cell-empty-border: rgba(0,0,0,0.07);
+  --cell-rank-color: #2c66ac;
+  --cell-rank-shadow: rgba(44,102,172,0.14);
+  --cell-sector-color: rgba(36,88,154,0.74);
+  --cell-sector-bg: rgba(36,88,154,0.07);
+  --cell-sector-border: rgba(36,88,154,0.14);
+  --cell-code-color: rgba(49,57,70,0.62);
+  --cell-price-color: rgba(16,19,26,0.82);
+  --cell-name-color: #151922;
+  --cell-name-shadow: rgba(255,255,255,0.45);
+  --cell-score-color: rgba(38,85,150,0.72);
+  --cell-value-color: rgba(31,38,52,0.78);
+  --cell-border-default: rgba(93,108,132,0.12);
+  --cell-hover-border: rgba(10,102,219,0.34);
+  --cell-hover-sweep: rgba(10,102,219,0.035);
+  --cell-empty-bg: rgba(255,255,255,0.34);
+  --cell-empty-border: rgba(93,108,132,0.1);
+  --cell-scanline: rgba(123, 138, 167, 0.03);
+  --cell-idle-ring: rgba(104, 128, 173, 0.10);
+  --cell-highlight-ring: rgba(10,102,219,0.22);
 
   /* ── ETF cell chrome ── */
-  --etf-cell-rank-color: #ff9f0a;
-  --etf-cell-rank-shadow: rgba(255,159,10,0.3);
-  --etf-cell-scale-color: rgba(180,90,0,0.7);
-  --etf-cell-code-color: rgba(100,60,0,0.55);
-  --etf-cell-price-color: rgba(80,50,0,0.7);
-  --etf-cell-name-color: #1d1d1f;
-  --etf-cell-name-shadow: rgba(180,90,0,0.1);
-  --etf-cell-turnover-color: rgba(160,80,0,0.75);
-  --etf-cell-portfolio-color: rgba(140,70,0,0.6);
-  --etf-cell-border-default: rgba(255,159,10,0.15);
-  --etf-cell-hover-border: rgba(255,159,10,0.45);
-  --etf-cell-hover-sweep: rgba(255,159,10,0.04);
-  --etf-cell-empty-bg: rgba(255,159,10,0.02);
-  --etf-cell-empty-border: rgba(255,159,10,0.08);
-  --etf-tooltip-bg: rgba(255,255,255,0.97);
-  --etf-tooltip-border: rgba(255,159,10,0.3);
-  --etf-tooltip-shadow: rgba(0,0,0,0.08);
-  --etf-tooltip-label: rgba(180,90,0,0.75);
-  --etf-tooltip-val: #b35a00;
+  --etf-cell-rank-color: #c47a18;
+  --etf-cell-rank-shadow: rgba(196,122,24,0.14);
+  --etf-cell-scale-color: rgba(142,88,22,0.74);
+  --etf-cell-code-color: rgba(97,72,36,0.62);
+  --etf-cell-price-color: rgba(79,60,32,0.76);
+  --etf-cell-name-color: #171a20;
+  --etf-cell-name-shadow: rgba(255,255,255,0.4);
+  --etf-cell-turnover-color: rgba(141,84,15,0.78);
+  --etf-cell-portfolio-color: rgba(110,82,36,0.66);
+  --etf-cell-border-default: rgba(182,123,46,0.14);
+  --etf-cell-hover-border: rgba(215,130,22,0.34);
+  --etf-cell-hover-sweep: rgba(215,130,22,0.04);
+  --etf-cell-empty-bg: rgba(255,255,255,0.3);
+  --etf-cell-empty-border: rgba(182,123,46,0.1);
+  --etf-cell-scanline: rgba(147, 133, 110, 0.03);
+  --etf-cell-idle-ring: rgba(182,123,46,0.1);
+  --etf-tooltip-bg: rgba(255,255,255,0.88);
+  --etf-tooltip-border: rgba(182,123,46,0.18);
+  --etf-tooltip-shadow: rgba(108,83,44,0.08);
+  --etf-tooltip-label: rgba(125,86,31,0.76);
+  --etf-tooltip-val: #8c5511;
 
   /* ── Controls ── */
-  --ctrl-page-btn-bg: rgba(0,113,227,0.05);
-  --ctrl-page-btn-color: #0071e3;
-  --ctrl-page-btn-border: rgba(0,113,227,0.25);
-  --ctrl-page-btn-hover-bg: rgba(0,113,227,0.12);
-  --ctrl-page-btn-hover-shadow: rgba(0,113,227,0.2);
-  --ctrl-dot-bg: rgba(0,113,227,0.04);
-  --ctrl-dot-border: rgba(0,0,0,0.15);
-  --ctrl-dot-color: #888;
-  --ctrl-dot-hover-bg: rgba(0,113,227,0.08);
-  --ctrl-dot-hover-color: #0071e3;
-  --ctrl-dot-active-bg: rgba(0,113,227,0.12);
-  --ctrl-dot-active-border: #0071e3;
-  --ctrl-dot-active-color: #0071e3;
-  --ctrl-dot-active-shadow: rgba(0,113,227,0.3);
-  --ctrl-page-info-color: #888;
-  --ctrl-jump-bg: #ffffff;
-  --ctrl-jump-color: #0071e3;
-  --ctrl-jump-border: rgba(0,113,227,0.25);
-  --ctrl-search-bg: #ffffff;
-  --ctrl-search-border: rgba(0,0,0,0.15);
-  --ctrl-search-color: #1d1d1f;
-  --ctrl-search-placeholder: rgba(0,0,0,0.3);
-  --ctrl-search-focus-border: #0071e3;
-  --ctrl-search-focus-shadow: rgba(0,113,227,0.2);
-  --ctrl-error-color: #c0392b;
-  --ctrl-state-color: #888;
-  --ctrl-loading-dot: #0071e3;
+  --ctrl-page-btn-bg: rgba(255,255,255,0.5);
+  --ctrl-page-btn-color: #205ca8;
+  --ctrl-page-btn-border: rgba(92,108,137,0.18);
+  --ctrl-page-btn-hover-bg: rgba(255,255,255,0.72);
+  --ctrl-page-btn-hover-shadow: rgba(64,91,132,0.14);
+  --ctrl-dot-bg: rgba(255,255,255,0.46);
+  --ctrl-dot-border: rgba(92,108,137,0.18);
+  --ctrl-dot-color: rgba(56,64,77,0.62);
+  --ctrl-dot-hover-bg: rgba(255,255,255,0.7);
+  --ctrl-dot-hover-color: #205ca8;
+  --ctrl-dot-active-bg: rgba(10,102,219,0.12);
+  --ctrl-dot-active-border: #205ca8;
+  --ctrl-dot-active-color: #205ca8;
+  --ctrl-dot-active-shadow: rgba(64,91,132,0.16);
+  --ctrl-page-info-color: rgba(46,53,66,0.72);
+  --ctrl-jump-bg: rgba(255,255,255,0.72);
+  --ctrl-jump-color: #205ca8;
+  --ctrl-jump-border: rgba(92,108,137,0.18);
+  --ctrl-search-bg: rgba(255,255,255,0.78);
+  --ctrl-search-border: rgba(92,108,137,0.16);
+  --ctrl-search-color: #151922;
+  --ctrl-search-placeholder: rgba(56,64,77,0.42);
+  --ctrl-search-focus-border: #205ca8;
+  --ctrl-search-focus-shadow: rgba(64,91,132,0.14);
+  --ctrl-error-color: #b44540;
+  --ctrl-state-color: rgba(56,64,77,0.68);
+  --ctrl-loading-dot: #205ca8;
+  --toggle-btn-muted-bg: rgba(255,255,255,0.58);
+  --toggle-btn-muted-color: rgba(33,77,141,0.74);
+  --toggle-btn-hover-bg: rgba(255,255,255,0.78);
+  --toggle-btn-hover-shadow: rgba(60,89,131,0.14);
+  --toggle-btn-active-bg: linear-gradient(180deg, rgba(233,243,255,0.94) 0%, rgba(220,234,252,0.92) 100%);
+  --toggle-btn-active-shadow: rgba(84,124,177,0.2);
+  --size-btn-muted-color: rgba(42,79,133,0.72);
+  --size-btn-hover-bg: rgba(255,255,255,0.78);
+  --size-btn-active-bg: rgba(10,102,219,0.11);
+  --size-btn-active-shadow: rgba(84,124,177,0.18);
 
   /* ── ETF controls ── */
-  --etf-ctrl-page-btn-bg: rgba(255,159,10,0.05);
-  --etf-ctrl-page-btn-color: #e68900;
-  --etf-ctrl-page-btn-border: rgba(255,159,10,0.25);
-  --etf-ctrl-page-btn-hover-bg: rgba(255,159,10,0.12);
-  --etf-ctrl-page-btn-hover-shadow: rgba(255,159,10,0.2);
-  --etf-ctrl-dot-bg: rgba(255,159,10,0.04);
-  --etf-ctrl-dot-border: rgba(0,0,0,0.15);
-  --etf-ctrl-dot-hover-bg: rgba(255,159,10,0.08);
-  --etf-ctrl-dot-hover-color: #e68900;
-  --etf-ctrl-dot-active-bg: rgba(255,159,10,0.12);
-  --etf-ctrl-dot-active-border: #e68900;
-  --etf-ctrl-dot-active-color: #e68900;
-  --etf-ctrl-dot-active-shadow: rgba(255,159,10,0.3);
-  --etf-ctrl-page-info-color: #888;
-  --etf-ctrl-jump-bg: #ffffff;
-  --etf-ctrl-jump-color: #e68900;
-  --etf-ctrl-jump-border: rgba(255,159,10,0.25);
-  --etf-ctrl-search-bg: #ffffff;
-  --etf-ctrl-search-border: rgba(0,0,0,0.15);
-  --etf-ctrl-search-color: #1d1d1f;
-  --etf-ctrl-search-placeholder: rgba(0,0,0,0.3);
-  --etf-ctrl-search-focus-border: #e68900;
-  --etf-ctrl-search-focus-shadow: rgba(255,159,10,0.2);
-  --etf-ctrl-error-color: #c0392b;
-  --etf-ctrl-state-color: #888;
-  --etf-ctrl-loading-dot: #e68900;
-  --etf-sort-toggle-bg: rgba(255,159,10,0.04);
-  --etf-sort-toggle-border: rgba(255,159,10,0.2);
-  --etf-sort-btn-color: rgba(200,100,0,0.6);
-  --etf-sort-btn-hover-bg: rgba(255,159,10,0.08);
-  --etf-sort-btn-active-bg: rgba(255,159,10,0.14);
-  --etf-sort-btn-active-shadow: rgba(255,159,10,0.2);
-  --etf-info-trigger-color: rgba(200,100,0,0.6);
-  --etf-info-trigger-border: rgba(255,159,10,0.25);
+  --etf-ctrl-page-btn-bg: rgba(255,255,255,0.5);
+  --etf-ctrl-page-btn-color: #ba6e0d;
+  --etf-ctrl-page-btn-border: rgba(182,123,46,0.2);
+  --etf-ctrl-page-btn-hover-bg: rgba(255,255,255,0.74);
+  --etf-ctrl-page-btn-hover-shadow: rgba(140,97,38,0.14);
+  --etf-ctrl-dot-bg: rgba(255,255,255,0.46);
+  --etf-ctrl-dot-border: rgba(182,123,46,0.18);
+  --etf-ctrl-dot-hover-bg: rgba(255,255,255,0.7);
+  --etf-ctrl-dot-hover-color: #ba6e0d;
+  --etf-ctrl-dot-active-bg: rgba(215,130,22,0.12);
+  --etf-ctrl-dot-active-border: #ba6e0d;
+  --etf-ctrl-dot-active-color: #ba6e0d;
+  --etf-ctrl-dot-active-shadow: rgba(140,97,38,0.16);
+  --etf-ctrl-page-info-color: rgba(74,62,44,0.72);
+  --etf-ctrl-jump-bg: rgba(255,255,255,0.72);
+  --etf-ctrl-jump-color: #ba6e0d;
+  --etf-ctrl-jump-border: rgba(182,123,46,0.18);
+  --etf-ctrl-search-bg: rgba(255,255,255,0.78);
+  --etf-ctrl-search-border: rgba(182,123,46,0.16);
+  --etf-ctrl-search-color: #171a20;
+  --etf-ctrl-search-placeholder: rgba(74,62,44,0.38);
+  --etf-ctrl-search-focus-border: #ba6e0d;
+  --etf-ctrl-search-focus-shadow: rgba(182,123,46,0.14);
+  --etf-ctrl-error-color: #b44540;
+  --etf-ctrl-state-color: rgba(74,62,44,0.68);
+  --etf-ctrl-loading-dot: #ba6e0d;
+  --etf-sort-toggle-bg: rgba(255,255,255,0.58);
+  --etf-sort-toggle-border: rgba(182,123,46,0.18);
+  --etf-sort-btn-color: rgba(141,84,15,0.72);
+  --etf-sort-btn-hover-bg: rgba(255,255,255,0.78);
+  --etf-sort-btn-active-bg: rgba(215,130,22,0.12);
+  --etf-sort-btn-active-shadow: rgba(140,97,38,0.14);
+  --etf-info-trigger-color: rgba(141,84,15,0.72);
+  --etf-info-trigger-border: rgba(182,123,46,0.22);
+  --toggle-etf-muted-color: rgba(141,84,15,0.72);
+  --toggle-etf-muted-bg: rgba(255,255,255,0.58);
+  --toggle-etf-hover-bg: rgba(255,255,255,0.78);
+  --toggle-etf-hover-shadow: rgba(140,97,38,0.14);
+  --toggle-etf-active-bg: linear-gradient(180deg, rgba(255,247,236,0.96) 0%, rgba(255,241,224,0.92) 100%);
+  --toggle-etf-active-shadow: rgba(182,123,46,0.18);
+  --toggle-score-muted-color: rgba(38,120,77,0.74);
+  --toggle-score-muted-bg: rgba(255,255,255,0.58);
+  --toggle-score-hover-bg: rgba(255,255,255,0.78);
+  --toggle-score-hover-shadow: rgba(43,118,79,0.14);
+  --toggle-score-active-bg: linear-gradient(180deg, rgba(238,251,244,0.96) 0%, rgba(231,248,239,0.92) 100%);
+  --toggle-score-active-shadow: rgba(43,118,79,0.18);
+  --tablet-size-btn-muted-color: rgba(141,84,15,0.72);
+  --tablet-size-btn-hover-bg: rgba(255,255,255,0.78);
+  --tablet-size-btn-active-bg: rgba(215,130,22,0.12);
+  --tablet-size-btn-active-shadow: rgba(140,97,38,0.14);
 
   /* ── Token settings ── */
-  --token-btn-border: #c7c7cc;
-  --token-btn-color: #6e6e73;
+  --token-btn-border: rgba(92,108,137,0.18);
+  --token-btn-color: rgba(52,60,74,0.72);
   --token-set-color: #34c759;
-  --token-panel-bg: #ffffff;
-  --token-panel-border: #c7c7cc;
-  --token-title-color: #6e6e73;
-  --token-input-bg: #f5f5f7;
-  --token-input-border: #c7c7cc;
-  --token-input-color: #1d1d1f;
+  --token-panel-bg: rgba(255,255,255,0.92);
+  --token-panel-border: rgba(92,108,137,0.16);
+  --token-title-color: rgba(52,60,74,0.72);
+  --token-input-bg: rgba(247,249,253,0.92);
+  --token-input-border: rgba(92,108,137,0.14);
+  --token-input-color: #151922;
   --token-save-bg: rgba(52,199,89,0.1);
   --token-save-color: #1a8a3a;
   --token-clear-bg: rgba(255,59,48,0.08);
-  --token-clear-color: #c0392b;
+  --token-clear-color: #b44540;
+  --token-panel-shadow: 0 22px 50px rgba(66,78,100,0.14);
+  --theme-toggle-bg: rgba(255,255,255,0.52);
+  --theme-toggle-border: rgba(92,108,137,0.16);
+  --theme-toggle-shadow: rgba(76,91,118,0.1);
+  --theme-toggle-hover-bg: rgba(255,255,255,0.8);
+  --theme-toggle-hover-border: rgba(92,108,137,0.24);
 }
 
 /* ── Topbar frosted-glass (light mode only) ── */

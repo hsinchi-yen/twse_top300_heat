@@ -62,7 +62,7 @@ const props = defineProps({
 
 const cellStyle = computed(() => ({
   backgroundColor: etfTierToColor(props.etf.color_tier),
-  boxShadow: `inset 0 0 24px ${etfTierToGlow(props.etf.color_tier)}, 0 0 1px rgba(255,179,0,0.08)`,
+  boxShadow: `inset 0 0 24px ${etfTierToGlow(props.etf.color_tier)}, 0 0 1px var(--etf-cell-idle-ring)`,
 }))
 
 // 持股週轉率年化值：優先用後端值，否則依類型估算
@@ -166,8 +166,8 @@ function formatPortfolioTurnover(v) {
     0deg,
     transparent,
     transparent 3px,
-    rgba(0, 0, 0, 0.08) 3px,
-    rgba(0, 0, 0, 0.08) 4px
+    var(--etf-cell-scanline) 3px,
+    var(--etf-cell-scanline) 4px
   );
   pointer-events: none;
   opacity: 0;

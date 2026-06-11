@@ -116,7 +116,7 @@ const formattedTime = computed(() => {
   height: 100dvh;
   background: transparent;
   color: var(--text-primary);
-  font-family: 'Inter', 'Noto Sans TC', sans-serif;
+  font-family: var(--font-sans);
 }
 
 .topbar {
@@ -166,6 +166,7 @@ const formattedTime = computed(() => {
   -webkit-text-fill-color: transparent;
   background-clip: text;
   filter: drop-shadow(0 0 6px var(--title-shadow));
+  position: relative;
 }
 
 .topbar-right {
@@ -218,8 +219,8 @@ const formattedTime = computed(() => {
 
 /* ── Theme toggle button ── */
 .theme-toggle {
-  background: var(--border-subtle);
-  border: 1px solid var(--border-default);
+  background: var(--theme-toggle-bg);
+  border: 1px solid var(--theme-toggle-border);
   color: var(--text-primary);
   border-radius: 50%;
   width: 28px;
@@ -233,11 +234,12 @@ const formattedTime = computed(() => {
   transition: background 0.15s, border-color 0.15s;
   padding: 0;
   line-height: 1;
+  box-shadow: 0 8px 18px -12px var(--theme-toggle-shadow);
 }
 
 .theme-toggle:hover {
-  background: var(--border-default);
-  border-color: var(--border-strong);
+  background: var(--theme-toggle-hover-bg);
+  border-color: var(--theme-toggle-hover-border);
 }
 
 .main-content {

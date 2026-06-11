@@ -12,11 +12,13 @@ body,
 body {
   background: var(--app-bg);
   color: var(--text-primary);
-  font-family: 'Inter', 'Noto Sans TC', sans-serif;
+  font-family: var(--font-sans);
   overflow: hidden;
-  /* subtle dot-grid texture (dark mode only) */
-  background-image: radial-gradient(var(--border-subtle) 1px, transparent 1px);
-  background-size: 28px 28px;
+  background-image: var(--app-bg-image);
+  background-size: var(--app-bg-size);
+  background-attachment: var(--app-bg-attachment);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /* ── Scrollbar ── */
