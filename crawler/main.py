@@ -26,7 +26,7 @@ from sources.tpex import fetch_tpex_daily
 from sources.yahoo import fetch_yahoo_quotes
 from sources.finmind import fetch_issue_shares, fetch_industry_categories, clear_cache
 from sources.buy_score import (
-    batch_fetch_scores, write_scores, load_scores_for_date,
+    batch_fetch_scores, write_scores, load_scores_for_date, load_latest_scores,
     QuotaExhaustedMidBatch, QUOTA_WAIT_S,
 )
 from processor import merge_and_rank

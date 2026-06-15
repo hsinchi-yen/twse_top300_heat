@@ -53,3 +53,13 @@ def test_missing_flag_is_noop(tmp_path):
          patch.object(main, "SCORING_FLAG_STALE_S", 10800):
         main._clear_stale_in_progress()  # must not raise
         assert not flag.exists()
+
+
+def test_score_job_helpers_are_imported():
+    """Guard against a missing import in score_job's force path.
+
+    score_job(force=True) references load_latest_scores; if it is not imported
+    into main, the forced run aborts with NameError and nothing is scored.
+    """
+    assert callable(main.load_latest_scores)
+    assert callable(main.load_scores_for_date)
