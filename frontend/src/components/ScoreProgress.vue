@@ -18,15 +18,20 @@ import { storeToRefs } from 'pinia'
 import { useStockStore } from '../stores/stockStore'
 
 const store = useStockStore()
-const { sectors, scores, scoresFetching, scoreDate, scoreGeneratedAt } = storeToRefs(store)
+const { sectors, scores, scoresFetching, scoreDate, scoreGeneratedAt, scoreProgress } = storeToRefs(store)
 
+// Counting scored stocks only works on a cold start; during a force refresh the
+// merged JSON keeps the full baseline, so prefer the crawler's real recompute
+// counter (scoreProgress) when the backend reports it.
 const totalCount = computed(() => {
+  if (scoreProgress.value) return scoreProgress.value.total
   let n = 0
   for (const sector of sectors.value) n += (sector.stocks?.length ?? 0)
   return n
 })
 
 const scoredCount = computed(() => {
+  if (scoreProgress.value) return scoreProgress.value.done
   const sc = scores.value
   let n = 0
   for (const sector of sectors.value) {

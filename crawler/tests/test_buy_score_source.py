@@ -19,6 +19,8 @@ from sources.buy_score import (
     batch_fetch_scores,
     write_scores,
     load_latest_scores,
+    write_progress,
+    clear_progress,
     QuotaExhaustedMidBatch,
 )
 from sources.finmind_client import FinMindError
@@ -111,6 +113,13 @@ class TestBatchFetchScores:
         result = batch_fetch_scores([])
         assert result == {}
 
+    def test_on_progress_called_per_stock(self):
+        calls = []
+        with patch("sources.buy_score.fetch_buy_score", return_value={"score": 1, "max_score": 24}), \
+             patch("sources.buy_score.time.sleep"):
+            batch_fetch_scores(["A", "B", "C"], on_progress=lambda d, t: calls.append((d, t)))
+        assert calls == [(1, 3), (2, 3), (3, 3)]
+
     def test_quota_exhaustion_raises_with_remaining_ids(self):
         """On FinMindError, batch raises QuotaExhaustedMidBatch with all unscored stocks."""
         calls = {"n": 0}
@@ -188,6 +197,26 @@ class TestWriteScores:
         with patch("sources.buy_score.SCORES_DIR", scores_dir):
             path = write_scores({}, "2026-05-19")
         assert path.name == "2026-05-19.json"
+
+
+class TestProgressFile:
+    def test_write_progress_then_clear(self, tmp_path):
+        scores_dir = tmp_path / "buy_scores"
+        flag = scores_dir / ".score_progress"
+        with patch("sources.buy_score.SCORES_DIR", scores_dir), \
+             patch("sources.buy_score.SCORE_PROGRESS_FLAG", flag):
+            write_progress(42, 600)
+            assert flag.exists()
+            payload = json.loads(flag.read_text(encoding="utf-8"))
+            assert payload["done"] == 42 and payload["total"] == 600
+            clear_progress()
+            assert not flag.exists()
+
+    def test_clear_progress_missing_is_noop(self, tmp_path):
+        flag = tmp_path / ".score_progress"
+        with patch("sources.buy_score.SCORE_PROGRESS_FLAG", flag):
+            clear_progress()  # must not raise
+            assert not flag.exists()
 
 
 class TestLoadLatestScores:

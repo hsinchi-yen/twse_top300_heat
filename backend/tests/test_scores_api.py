@@ -203,6 +203,29 @@ class TestStaleFlagRecovery:
                 self._make_flag(progress, age_seconds=20000)
                 assert scores_mod._is_fetching() is False
 
+    def test_progress_reported_while_fetching(self):
+        from routers import scores as scores_mod
+        with tempfile.TemporaryDirectory() as tmpdir:
+            progress = Path(tmpdir) / ".score_progress"
+            progress.write_text(json.dumps({"done": 42, "total": 600}), encoding="utf-8")
+            with patch.object(scores_mod, "SCORE_PROGRESS_FLAG", progress), \
+                 patch.object(scores_mod, "SCORING_FLAG_STALE_S", 10800), \
+                 patch("routers.scores._load", return_value=SAMPLE_PAYLOAD), \
+                 patch("routers.scores._is_fetching", return_value=True):
+                data = client.get("/api/scores").json()
+        assert data["progress"] == {"done": 42, "total": 600}
+
+    def test_progress_absent_when_not_fetching(self):
+        from routers import scores as scores_mod
+        with tempfile.TemporaryDirectory() as tmpdir:
+            progress = Path(tmpdir) / ".score_progress"
+            progress.write_text(json.dumps({"done": 42, "total": 600}), encoding="utf-8")
+            with patch.object(scores_mod, "SCORE_PROGRESS_FLAG", progress), \
+                 patch("routers.scores._load", return_value=SAMPLE_PAYLOAD), \
+                 patch("routers.scores._is_fetching", return_value=False):
+                data = client.get("/api/scores").json()
+        assert "progress" not in data
+
     def test_force_resumes_after_stale_flag(self):
         """With only a stale flag present, force=true must re-request a refresh."""
         from routers import scores as scores_mod

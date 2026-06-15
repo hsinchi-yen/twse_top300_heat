@@ -61,12 +61,15 @@ async function _doFetch(url, headers = {}) {
 
     if (data.fetching) {
       store.setScoresFetching(true)
+      store.setScoreProgress(data.progress ?? null)
       if (hasScores) {
         store.setPartialScores(data.scores)
       }
 
-      // Stall detection: track whether the scored count advances between polls.
-      const count = _scoredCount(data.scores)
+      // Stall detection: prefer the crawler's real recompute counter (data.progress),
+      // which advances during a force refresh even though the merged baseline stays
+      // full; fall back to counting scored stocks for a cold start.
+      const count = data.progress ? data.progress.done : _scoredCount(data.scores)
       const now = Date.now()
       if (count > _lastScoredCount) {
         _lastScoredCount = count

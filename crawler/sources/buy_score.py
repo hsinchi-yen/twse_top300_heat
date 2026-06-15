@@ -59,6 +59,32 @@ class QuotaExhaustedMidBatch(Exception):
         )
 MAX_KEEP_DAYS = 7
 
+# Live recompute-progress for the current run. The dated JSON always carries the
+# full 600-stock baseline during a force refresh, so the frontend cannot infer
+# progress from it; this file reports how far the *current* job has advanced.
+SCORE_PROGRESS_FLAG = SCORES_DIR / ".score_progress"
+
+
+def write_progress(done: int, total: int) -> None:
+    """Atomically record current-run progress for the backend/frontend to read."""
+    try:
+        SCORES_DIR.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps({
+            "done": done,
+            "total": total,
+            "updated_at": datetime.now(tz=TZ_TAIPEI).isoformat(),
+        })
+        tmp = SCORES_DIR / ".score_progress.tmp"
+        tmp.write_text(payload, encoding="utf-8")
+        tmp.replace(SCORE_PROGRESS_FLAG)
+    except Exception:
+        pass
+
+
+def clear_progress() -> None:
+    """Remove the progress file once a run finishes (or is no longer active)."""
+    SCORE_PROGRESS_FLAG.unlink(missing_ok=True)
+
 
 def fetch_buy_score(stock_id: str, token: str | None = None) -> dict | None:
     """Compute buy score for one stock natively.
@@ -93,6 +119,7 @@ def batch_fetch_scores(
     on_batch: Callable[[dict[str, dict]], None] | None = None,
     batch_size: int = 50,
     token: str | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> dict[str, dict]:
     """Compute buy scores sequentially with REQUEST_DELAY pacing.
 
@@ -127,6 +154,9 @@ def batch_fetch_scores(
         if result is not None:
             scores[sid] = result
         logger.info("buy_score %d/%d  ok=%d  id=%s", i + 1, total, len(scores), sid)
+
+        if on_progress is not None:
+            on_progress(i + 1, total)
 
         if on_batch is not None and (len(scores) % batch_size == 0 or i == total - 1):
             on_batch(scores)

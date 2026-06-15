@@ -180,7 +180,11 @@ Behavior:
   (crashed mid-run): it no longer counts toward `fetching`, so a later
   `force=true` can take over and the frontend button is not pinned disabled
 - `date` / `generated_at` feed the frontend "評分更新 <date> <time>" label;
-  while fetching, the frontend renders a progress bar (scored / display-pool)
+  while fetching, the frontend renders a progress bar
+- `progress: {done, total}` is included only while fetching, read from the
+  crawler's `.score_progress` file (the dated JSON keeps the full baseline during
+  a force refresh, so this counter is the only accurate recompute progress);
+  the frontend prefers it and falls back to counting scored stocks on a cold start
 
 Example:
 

@@ -56,6 +56,21 @@ describe('ScoreProgress — while fetching', () => {
     })
     expect(w.find('.sp-text').text()).toContain('0/4')
   })
+
+  it('prefers backend progress over scored-stock count (force refresh keeps baseline)', () => {
+    const w = mountWith((store) => {
+      store.setScoresFetching(true)
+      // Baseline retained: all 4 displayed stocks already have scores...
+      store.setPartialScores({
+        '2330': { score: 1, max_score: 24 }, '2454': { score: 1, max_score: 24 },
+        '2881': { score: 1, max_score: 24 }, '2882': { score: 1, max_score: 24 },
+      })
+      // ...but the crawler reports it has only recomputed 120/600 so far.
+      store.setScoreProgress({ done: 120, total: 600 })
+    })
+    expect(w.find('.sp-text').text()).toContain('120/600')
+    expect(w.find('.sp-text').text()).toContain('20%')
+  })
 })
 
 describe('ScoreProgress — when idle', () => {

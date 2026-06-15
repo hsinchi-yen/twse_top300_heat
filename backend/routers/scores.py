@@ -37,6 +37,10 @@ SCORING_FLAG_STALE_S = float(os.getenv("SCORING_FLAG_STALE_S", "10800"))
 # Coordination flags shared with the crawler (see crawler/main.py).
 FORCE_REFRESH_FLAG = SCORES_DIR / ".force_refresh"
 SCORING_IN_PROGRESS_FLAG = SCORES_DIR / ".scoring_in_progress"
+# Live recompute progress for the current run ({"done", "total"}). The dated JSON
+# keeps the full baseline during a force refresh, so this is the only accurate
+# signal of how far the active run has advanced.
+SCORE_PROGRESS_FLAG = SCORES_DIR / ".score_progress"
 
 # Memory cache keyed by file mtime: {"mtime": float, "payload": dict}
 _cache: dict = {}
@@ -110,6 +114,21 @@ def _is_fetching() -> bool:
     return _flag_active(SCORING_IN_PROGRESS_FLAG) or _flag_active(FORCE_REFRESH_FLAG)
 
 
+def _read_progress() -> dict | None:
+    """Return {"done", "total"} for the active run, or None if unavailable/stale."""
+    if not _flag_active(SCORE_PROGRESS_FLAG):
+        return None
+    try:
+        raw = json.loads(SCORE_PROGRESS_FLAG.read_text(encoding="utf-8"))
+        done = int(raw["done"])
+        total = int(raw["total"])
+    except Exception:
+        return None
+    if total <= 0:
+        return None
+    return {"done": done, "total": total}
+
+
 def _request_force_refresh() -> None:
     """Write the force-refresh flag the crawler polls for (every minute)."""
     try:
@@ -134,8 +153,12 @@ def get_scores(request: Request, force: bool = False):
 
     data = _load()
     fetching = _is_fetching()
+    progress = _read_progress() if fetching else None
 
+    body = {"date": "", "scores": {}}
     if data:
-        return JSONResponse(content={**data, "fetching": fetching})
-
-    return JSONResponse(content={"date": "", "scores": {}, "fetching": fetching})
+        body = {**data}
+    body["fetching"] = fetching
+    if progress is not None:
+        body["progress"] = progress
+    return JSONResponse(content=body)

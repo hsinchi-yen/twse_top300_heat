@@ -83,6 +83,21 @@ describe('stockStore — buy score state', () => {
     store.setScores({ '2330': { score: 18, max_score: 24 } })
     expect(store.scoresStalled).toBe(false)
   })
+
+  it('setScoreProgress stores and clears the progress counter', () => {
+    const store = useStockStore()
+    store.setScoreProgress({ done: 50, total: 600 })
+    expect(store.scoreProgress).toEqual({ done: 50, total: 600 })
+    store.setScoreProgress(null)
+    expect(store.scoreProgress).toBe(null)
+  })
+
+  it('setScores clears the progress counter', () => {
+    const store = useStockStore()
+    store.setScoreProgress({ done: 50, total: 600 })
+    store.setScores({ '2330': { score: 18, max_score: 24 } })
+    expect(store.scoreProgress).toBe(null)
+  })
 })
 
 describe('stockStore — mode', () => {

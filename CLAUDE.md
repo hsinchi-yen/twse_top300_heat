@@ -76,6 +76,8 @@ cd frontend && npm run test
     YYYY-MM-DD.json
     .force_refresh
     .scoring_in_progress
+    .score_progress      # {done,total} live recompute counter for the active run
+    .score_resume        # quota-resume state (pending ids), persists across restarts
 ```
 
 ## Production Server

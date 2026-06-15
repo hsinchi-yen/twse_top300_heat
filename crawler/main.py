@@ -27,7 +27,7 @@ from sources.yahoo import fetch_yahoo_quotes
 from sources.finmind import fetch_issue_shares, fetch_industry_categories, clear_cache
 from sources.buy_score import (
     batch_fetch_scores, write_scores, load_scores_for_date, load_latest_scores,
-    QuotaExhaustedMidBatch, QUOTA_WAIT_S,
+    write_progress, clear_progress, QuotaExhaustedMidBatch, QUOTA_WAIT_S,
 )
 from processor import merge_and_rank
 
@@ -310,17 +310,21 @@ def _resume_score_job(pending_ids: list[str], run_date: str) -> None:
         logger.info("_resume_score_job partial write: %d scored", len(merged))
 
     try:
-        new_scores = batch_fetch_scores(pending_ids, on_batch=_write_partial)
+        new_scores = batch_fetch_scores(
+            pending_ids, on_batch=_write_partial, on_progress=write_progress,
+        )
     except QuotaExhaustedMidBatch as exc:
         logger.warning(
             "_resume_score_job: quota hit again — %d stocks still pending, will retry in %.0fs",
             len(exc.remaining_ids), QUOTA_WAIT_S,
         )
         _write_resume_state(exc.remaining_ids, run_date)
+        clear_progress()
         return
 
     merged_scores = {**existing_scores, **new_scores}
     write_scores(merged_scores, run_date)
+    clear_progress()
     logger.info("_resume_score_job done: %d stocks in final result for %s", len(merged_scores), run_date)
 
 
@@ -406,7 +410,9 @@ def score_job(force: bool = False) -> None:
         )
 
     try:
-        new_scores = batch_fetch_scores(stock_ids, on_batch=_write_partial)
+        new_scores = batch_fetch_scores(
+            stock_ids, on_batch=_write_partial, on_progress=write_progress,
+        )
     except QuotaExhaustedMidBatch as exc:
         logger.warning(
             "score_job: quota exhausted — %d/%d stocks remain unscored. "
@@ -414,10 +420,12 @@ def score_job(force: bool = False) -> None:
             len(exc.remaining_ids), len(all_stock_ids), QUOTA_WAIT_S,
         )
         _write_resume_state(exc.remaining_ids, today)
+        clear_progress()
         return
 
     merged_scores = {**_partial_baseline, **new_scores}
     write_scores(merged_scores, today)
+    clear_progress()
     logger.info("score_job done: %d/%d stocks scored", len(merged_scores), len(all_stock_ids))
 
 
@@ -436,6 +444,7 @@ def _clear_stale_in_progress() -> None:
     age = _time.time() - mtime
     if age > SCORING_FLAG_STALE_S:
         SCORING_IN_PROGRESS_FLAG.unlink(missing_ok=True)
+        clear_progress()
         logger.warning(
             "Cleared orphaned .scoring_in_progress (age %.0fs > %.0fs)",
             age, SCORING_FLAG_STALE_S,
@@ -552,6 +561,7 @@ if __name__ == "__main__":
     # watch job after QUOTA_WAIT_S seconds.
     if SCORING_IN_PROGRESS_FLAG.exists():
         SCORING_IN_PROGRESS_FLAG.unlink(missing_ok=True)
+        clear_progress()
         logger.info("Startup: removed stale .scoring_in_progress flag")
     if SCORE_RESUME_FLAG.exists():
         state = _read_resume_state()
