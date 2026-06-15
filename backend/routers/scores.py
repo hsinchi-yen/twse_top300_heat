@@ -27,6 +27,13 @@ logger = logging.getLogger(__name__)
 SCORES_DIR = Path(os.getenv("SCORES_DIR", "/app/data/buy_scores"))
 CACHE_MAX_AGE_DAYS = int(os.getenv("BUY_SCORE_CACHE_MAX_AGE_DAYS", "30"))
 
+# A coordination flag older than this is treated as orphaned (crawler crashed
+# mid-run without removing it). Without this, a stale .scoring_in_progress would
+# pin fetching=true forever and permanently disable the refresh button. A single
+# score_job pass stays well under this; the quota-wait window does NOT hold the
+# in-progress flag, so 3h is safe. See crawler/main.py force_refresh_watch_job.
+SCORING_FLAG_STALE_S = float(os.getenv("SCORING_FLAG_STALE_S", "10800"))
+
 # Coordination flags shared with the crawler (see crawler/main.py).
 FORCE_REFRESH_FLAG = SCORES_DIR / ".force_refresh"
 SCORING_IN_PROGRESS_FLAG = SCORES_DIR / ".scoring_in_progress"
@@ -77,9 +84,30 @@ def _load() -> dict:
     return {}
 
 
+def _flag_active(flag: Path) -> bool:
+    """True if the flag exists and is not stale.
+
+    A flag whose mtime is older than SCORING_FLAG_STALE_S is considered orphaned
+    (crawler crashed without cleanup) and reported as inactive, so force refresh
+    can resume and the frontend button is no longer pinned disabled.
+    """
+    try:
+        mtime = flag.stat().st_mtime
+    except FileNotFoundError:
+        return False
+    if (time.time() - mtime) > SCORING_FLAG_STALE_S:
+        logger.warning("Ignoring stale coordination flag %s (age > %.0fs)", flag.name, SCORING_FLAG_STALE_S)
+        return False
+    return True
+
+
 def _is_fetching() -> bool:
-    """True while the crawler is running (or has been asked to run) a refresh."""
-    return SCORING_IN_PROGRESS_FLAG.exists() or FORCE_REFRESH_FLAG.exists()
+    """True while the crawler is running (or has been asked to run) a refresh.
+
+    Stale flags (see _flag_active) are ignored so a crashed run cannot wedge the
+    feature permanently.
+    """
+    return _flag_active(SCORING_IN_PROGRESS_FLAG) or _flag_active(FORCE_REFRESH_FLAG)
 
 
 def _request_force_refresh() -> None:

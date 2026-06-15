@@ -6,14 +6,14 @@
       :class="['toggle-btn', mode === 'volume' ? 'active' : '']"
       @click="emit('mode-change', 'volume')"
     >
-      成交量 TOP 480
+      成交量 TOP {{ MAX_STOCKS }}
     </button>
     <button
       id="btn-turnover"
       :class="['toggle-btn', mode === 'turnover' ? 'active' : '']"
       @click="emit('mode-change', 'turnover')"
     >
-      週轉率 TOP 480
+      週轉率 TOP {{ MAX_STOCKS }}
     </button>
     <button
       id="btn-etf"
@@ -33,24 +33,14 @@
     <!-- 分隔線 -->
     <span class="divider" />
 
-    <!-- 格子大小切換（桌機 > 1024px）-->
-    <div v-if="!isMobile && !isTablet" class="grid-size-group" title="卡片大小">
+    <!-- 格子大小切換（桌機 / 平板 > 768px）-->
+    <div v-if="!isMobile" class="grid-size-group" title="卡片大小">
       <button
         v-for="n in [6, 5, 4]"
         :key="n"
         :class="['size-btn', gridSize === n ? 'active' : '']"
         @click="emit('grid-size-change', n)"
       >{{ n }}×{{ n }}</button>
-    </div>
-
-    <!-- 密度切換（平板 769–1024px）-->
-    <div v-else-if="isTablet" class="grid-size-group tablet-density-group" title="每頁卡片數">
-      <button
-        v-for="d in ['3x4', '4x4']"
-        :key="d"
-        :class="['size-btn', tabletDensity === d ? 'active' : '']"
-        @click="emit('tablet-density-change', d)"
-      >{{ d }}</button>
     </div>
 
     <!-- 密度切換（手機 ≤ 768px）-->
@@ -67,16 +57,16 @@
 
 <script setup>
 import { useBreakpoint } from '../composables/useBreakpoint'
+import { MAX_STOCKS } from '../constants'
 
 const props = defineProps({
   mode:          { type: String,  required: true },
   gridSize:      { type: Number,  default: 6 },
   mobileDensity: { type: String,  default: '2x3' },
-  tabletDensity: { type: String,  default: '3x4' },
 })
-const emit = defineEmits(['mode-change', 'grid-size-change', 'density-change', 'tablet-density-change'])
+const emit = defineEmits(['mode-change', 'grid-size-change', 'density-change'])
 
-const { isMobile, isTablet } = useBreakpoint()
+const { isMobile } = useBreakpoint()
 </script>
 
 <style scoped>

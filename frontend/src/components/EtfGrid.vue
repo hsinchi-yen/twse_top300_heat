@@ -12,7 +12,7 @@
         class="etf-grid"
         :style="gridStyle"
         :data-size="gridSize"
-        :data-density="isMobile ? mobileDensity : (isTablet ? tabletDensity : null)"
+        :data-density="isMobile ? mobileDensity : null"
         @pointerdown="onPointerDown"
         @pointerup="onPointerUp"
       >
@@ -116,25 +116,23 @@ import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useStockStore } from '../stores/stockStore'
 import { useBreakpoint } from '../composables/useBreakpoint'
-import { MOBILE_DENSITY, TABLET_DENSITY } from '../constants'
+import { MOBILE_DENSITY } from '../constants'
 import EtfCell from './EtfCell.vue'
 
 const store = useStockStore()
-const { etfs, etfLoading, etfError, etfSortBy, gridSize, mobileDensity, tabletDensity } = storeToRefs(store)
-const { isMobile, isTablet } = useBreakpoint()
+const { etfs, etfLoading, etfError, etfSortBy, gridSize, mobileDensity } = storeToRefs(store)
+const { isMobile } = useBreakpoint()
 
 const page = ref(0)
 const selectedTypes = ref(new Set())
 
 // ── grid geometry ──
 const cols = computed(() => {
-  if (isMobile.value)  return MOBILE_DENSITY[mobileDensity.value].cols
-  if (isTablet.value)  return TABLET_DENSITY[tabletDensity.value].cols
+  if (isMobile.value) return MOBILE_DENSITY[mobileDensity.value].cols
   return gridSize.value
 })
 const rows = computed(() => {
-  if (isMobile.value)  return MOBILE_DENSITY[mobileDensity.value].rows
-  if (isTablet.value)  return TABLET_DENSITY[tabletDensity.value].rows
+  if (isMobile.value) return MOBILE_DENSITY[mobileDensity.value].rows
   return gridSize.value
 })
 const pageSize = computed(() => cols.value * rows.value)

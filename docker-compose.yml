@@ -15,6 +15,7 @@ services:
       - UVICORN_KEEPALIVE_SECONDS=5
       - UVICORN_LOG_LEVEL=warning
       - SCORES_DIR=/app/data/buy_scores
+      - SCORING_FLAG_STALE_S=${SCORING_FLAG_STALE_S:-10800}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
     logging:
       driver: json-file
@@ -38,9 +39,9 @@ services:
       - DATABASE_URL=sqlite:////app/data/twse_heat.db
       - FINMIND_TOKEN=${FINMIND_TOKEN:-}
       - SCORES_DIR=/app/data/buy_scores
-      - SCORE_CANDIDATE_LIMIT=${SCORE_CANDIDATE_LIMIT:-480}
+      - SCORE_CANDIDATE_LIMIT=${SCORE_CANDIDATE_LIMIT:-600}
       - BUY_SCORE_QUOTA_WAIT_S=${BUY_SCORE_QUOTA_WAIT_S:-3600}
-      - BUY_SCORE_QUOTA_MAX_CYCLES=${BUY_SCORE_QUOTA_MAX_CYCLES:-24}
+      - SCORING_FLAG_STALE_S=${SCORING_FLAG_STALE_S:-10800}
     logging:
       driver: json-file
       options:

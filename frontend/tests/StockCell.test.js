@@ -115,6 +115,27 @@ describe('StockCell — buy score display', () => {
     })
   })
 
+  describe('turnover value in buy_score mode', () => {
+    it('shows turnover_rate between volume and price change', () => {
+      const w = mountCell({ mode: 'buy_score', scoresLoaded: true, buyScore: { score: 18, max_score: 24 } })
+      expect(w.find('.cell-turnover').exists()).toBe(true)
+      expect(w.find('.cell-turnover').text()).toBe('0.82%')
+    })
+
+    it('shows dash when turnover_rate is missing', () => {
+      setActivePinia(createPinia())
+      const w = mount(StockCell, {
+        props: { stock: makeStock({ turnover_rate: null }), mode: 'buy_score', scoresLoaded: true, buyScore: null },
+      })
+      expect(w.find('.cell-turnover').text()).toBe('—')
+    })
+
+    it('does NOT render turnover in volume/turnover modes', () => {
+      expect(mountCell({ mode: 'turnover' }).find('.cell-turnover').exists()).toBe(false)
+      expect(mountCell({ mode: 'volume' }).find('.cell-turnover').exists()).toBe(false)
+    })
+  })
+
   describe('existing display elements are unaffected', () => {
     it('still shows rank', () => {
       const w = mountCell()

@@ -7,6 +7,7 @@ main.py — Crawler APScheduler entry point
     - 每日 08:55 重置 cache、刷新 sector_map
 """
 
+import json
 import logging
 import os
 import random
@@ -24,7 +25,10 @@ from sources.twse import fetch_twse_daily
 from sources.tpex import fetch_tpex_daily
 from sources.yahoo import fetch_yahoo_quotes
 from sources.finmind import fetch_issue_shares, fetch_industry_categories, clear_cache
-from sources.buy_score import batch_fetch_scores, write_scores, load_scores_for_date
+from sources.buy_score import (
+    batch_fetch_scores, write_scores, load_scores_for_date,
+    QuotaExhaustedMidBatch, QUOTA_WAIT_S,
+)
 from processor import merge_and_rank
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -35,7 +39,7 @@ TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 MARKET_CLOSE = time(13, 30)
 MIN_VALID_RECORDS = int(os.getenv("MIN_VALID_RECORDS", "80"))
 # Candidate pool: configurable but hard-capped to prevent runaway token cost.
-SCORE_CANDIDATE_LIMIT = min(int(os.getenv("SCORE_CANDIDATE_LIMIT", "480")), 1000)
+SCORE_CANDIDATE_LIMIT = min(int(os.getenv("SCORE_CANDIDATE_LIMIT", "600")), 1000)
 # Storage watermark thresholds (§4.1-4.4)
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
 STORAGE_WARN_PCT = float(os.getenv("STORAGE_WARN_PCT", "70.0"))
@@ -44,9 +48,16 @@ STORAGE_EMERGENCY_PCT = float(os.getenv("STORAGE_EMERGENCY_PCT", "90.0"))
 
 # On-demand score refresh: backend writes FORCE_FLAG; crawler runs a forced
 # score_job and writes PROGRESS_FLAG while in progress (backend reports fetching).
+# RESUME_FLAG persists quota-resume state across process restarts.
 SCORES_DIR = Path(os.getenv("SCORES_DIR", "/app/data/buy_scores"))
 FORCE_REFRESH_FLAG = SCORES_DIR / ".force_refresh"
 SCORING_IN_PROGRESS_FLAG = SCORES_DIR / ".scoring_in_progress"
+SCORE_RESUME_FLAG = SCORES_DIR / ".score_resume"
+# A .scoring_in_progress older than this was orphaned by a crashed/restarted run;
+# clear it so it cannot pin backend fetching=true forever. Must match the backend
+# SCORING_FLAG_STALE_S (backend/routers/scores.py). A single score_job pass stays
+# under this; quota-wait does not hold the in-progress flag.
+SCORING_FLAG_STALE_S = float(os.getenv("SCORING_FLAG_STALE_S", "10800"))
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 Session = sessionmaker(bind=engine)
@@ -247,8 +258,74 @@ def vacuum_job() -> None:
         logger.warning("VACUUM failed: %s", exc)
 
 
+def _write_resume_state(pending_ids: list[str], run_date: str) -> None:
+    """Persist quota-resume state to disk so scoring can continue after QUOTA_WAIT_S.
+
+    Written when batch_fetch_scores raises QuotaExhaustedMidBatch. The
+    force_refresh_watch_job reads this every minute and re-triggers scoring once
+    QUOTA_WAIT_S has elapsed — surviving container restarts transparently.
+    """
+    SCORES_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "pending_ids": pending_ids,
+        "run_date": run_date,
+        "quota_hit_at": datetime.now(tz=TZ_TAIPEI).isoformat(),
+    }
+    SCORE_RESUME_FLAG.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    logger.info(
+        "Score resume state saved: %d stocks pending for %s — will retry in %.0fs",
+        len(pending_ids), run_date, QUOTA_WAIT_S,
+    )
+
+
+def _read_resume_state() -> dict | None:
+    """Read quota-resume state from disk, or return None if no state file exists."""
+    if not SCORE_RESUME_FLAG.exists():
+        return None
+    try:
+        return json.loads(SCORE_RESUME_FLAG.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("Failed to read score resume state (%s) — discarding", exc)
+        SCORE_RESUME_FLAG.unlink(missing_ok=True)
+        return None
+
+
+def _resume_score_job(pending_ids: list[str], run_date: str) -> None:
+    """Continue a quota-interrupted score job for the given remaining stock IDs.
+
+    Loads the partial JSON already written for run_date, fetches only the pending
+    stocks, and merges results. On another quota hit, writes a new resume state so
+    the watch job will retry again after QUOTA_WAIT_S — no upper cycle limit.
+    """
+    if not pending_ids:
+        logger.info("_resume_score_job: no pending stocks, nothing to do")
+        return
+
+    logger.info("_resume_score_job: %d stocks remaining for %s", len(pending_ids), run_date)
+    existing_scores = load_scores_for_date(run_date)
+
+    def _write_partial(accumulated: dict) -> None:
+        merged = {**existing_scores, **accumulated}
+        write_scores(merged, run_date)
+        logger.info("_resume_score_job partial write: %d scored", len(merged))
+
+    try:
+        new_scores = batch_fetch_scores(pending_ids, on_batch=_write_partial)
+    except QuotaExhaustedMidBatch as exc:
+        logger.warning(
+            "_resume_score_job: quota hit again — %d stocks still pending, will retry in %.0fs",
+            len(exc.remaining_ids), QUOTA_WAIT_S,
+        )
+        _write_resume_state(exc.remaining_ids, run_date)
+        return
+
+    merged_scores = {**existing_scores, **new_scores}
+    write_scores(merged_scores, run_date)
+    logger.info("_resume_score_job done: %d stocks in final result for %s", len(merged_scores), run_date)
+
+
 def score_job(force: bool = False) -> None:
-    """Compute buy scores for the top-480 stocks by volume, writing to JSON cache.
+    """Compute buy scores for the top-SCORE_CANDIDATE_LIMIT stocks by volume, writing to JSON cache.
 
     Queries the most recent date with actual trading data (not today) so the job
     works correctly when run at 03:00 on the 1st — trading data for that calendar
@@ -300,6 +377,13 @@ def score_job(force: bool = False) -> None:
     if existing_scores:
         logger.info("score_job: pre-loaded %d existing scores for %s", len(existing_scores), today)
 
+    # Partial writes during this run merge against the best available baseline so
+    # the frontend never regresses.  On a new day existing_scores is empty, so fall
+    # back to the latest dated file (yesterday's complete set) as the seed.
+    _partial_baseline = existing_scores if existing_scores else load_latest_scores().get("scores", {})
+    if _partial_baseline is not existing_scores:
+        logger.info("score_job: using previous scores (%d) as partial-write baseline", len(_partial_baseline))
+
     if force:
         stock_ids = all_stock_ids
         logger.info("score_job: force refresh — recomputing all %d stocks", len(all_stock_ids))
@@ -314,39 +398,114 @@ def score_job(force: bool = False) -> None:
         )
 
     def _write_partial(accumulated: dict) -> None:
-        merged = {**existing_scores, **accumulated}
+        merged = {**_partial_baseline, **accumulated}
         write_scores(merged, today)
         logger.info(
             "score_job partial write: %d/%d scored",
             len(merged), len(all_stock_ids),
         )
 
-    new_scores = batch_fetch_scores(stock_ids, on_batch=_write_partial)
-    merged_scores = {**existing_scores, **new_scores}
+    try:
+        new_scores = batch_fetch_scores(stock_ids, on_batch=_write_partial)
+    except QuotaExhaustedMidBatch as exc:
+        logger.warning(
+            "score_job: quota exhausted — %d/%d stocks remain unscored. "
+            "Saving resume state; will retry in %.0fs.",
+            len(exc.remaining_ids), len(all_stock_ids), QUOTA_WAIT_S,
+        )
+        _write_resume_state(exc.remaining_ids, today)
+        return
+
+    merged_scores = {**_partial_baseline, **new_scores}
     write_scores(merged_scores, today)
     logger.info("score_job done: %d/%d stocks scored", len(merged_scores), len(all_stock_ids))
 
 
-def force_refresh_watch_job() -> None:
-    """Detect a backend-requested force refresh and run a forced score_job.
+def _clear_stale_in_progress() -> None:
+    """Remove an orphaned .scoring_in_progress left by a crashed/restarted run.
 
-    Backend writes FORCE_REFRESH_FLAG via GET /api/scores?force=true. We consume
-    it immediately (so triggers during a long run don't queue), mark progress via
-    SCORING_IN_PROGRESS_FLAG (backend reports fetching=true), then run the job.
+    The flag is written before score_job and removed in a finally block; a hard
+    crash (OOM, container restart) skips that cleanup and leaves the flag, which
+    would pin backend fetching=true forever. If its mtime is older than
+    SCORING_FLAG_STALE_S, no run can legitimately still own it — remove it.
+    """
+    try:
+        mtime = SCORING_IN_PROGRESS_FLAG.stat().st_mtime
+    except FileNotFoundError:
+        return
+    age = _time.time() - mtime
+    if age > SCORING_FLAG_STALE_S:
+        SCORING_IN_PROGRESS_FLAG.unlink(missing_ok=True)
+        logger.warning(
+            "Cleared orphaned .scoring_in_progress (age %.0fs > %.0fs)",
+            age, SCORING_FLAG_STALE_S,
+        )
+
+
+def force_refresh_watch_job() -> None:
+    """Handle explicit force-refresh requests and quota-resume triggers (every minute).
+
+    Two paths:
+      1. FORCE_REFRESH_FLAG exists  → run score_job(force=True) immediately.
+         Any pending .score_resume is discarded (new request supersedes it).
+      2. SCORE_RESUME_FLAG exists AND QUOTA_WAIT_S has elapsed since the quota hit
+         → resume scoring for the saved remaining stock IDs.
+
+    Both paths write SCORING_IN_PROGRESS_FLAG so the backend reports fetching=true.
+    On quota hit inside either job, .score_resume is written and this function
+    returns — the next eligible run (≥ QUOTA_WAIT_S later) picks it up again.
+    This loop continues without an upper limit until all stocks are scored.
     APScheduler max_instances=1 prevents overlapping runs.
     """
-    if not FORCE_REFRESH_FLAG.exists():
+    _clear_stale_in_progress()
+
+    if FORCE_REFRESH_FLAG.exists():
+        # Explicit refresh: discard any pending quota-resume and restart from scratch.
+        SCORE_RESUME_FLAG.unlink(missing_ok=True)
+        try:
+            SCORES_DIR.mkdir(parents=True, exist_ok=True)
+            SCORING_IN_PROGRESS_FLAG.write_text(
+                datetime.now(tz=TZ_TAIPEI).isoformat(), encoding="utf-8"
+            )
+            FORCE_REFRESH_FLAG.unlink(missing_ok=True)
+            logger.info("force_refresh: flag detected, running forced score_job")
+            score_job(force=True)
+        except Exception as exc:
+            logger.error("force_refresh_watch_job failed: %s", exc)
+        finally:
+            SCORING_IN_PROGRESS_FLAG.unlink(missing_ok=True)
         return
+
+    # Check for a quota-resume.
+    resume_state = _read_resume_state()
+    if resume_state is None:
+        return
+
+    try:
+        quota_hit_at = datetime.fromisoformat(resume_state["quota_hit_at"])
+    except (KeyError, ValueError) as exc:
+        logger.warning("Invalid resume state (%s) — discarding", exc)
+        SCORE_RESUME_FLAG.unlink(missing_ok=True)
+        return
+
+    elapsed = (datetime.now(tz=TZ_TAIPEI) - quota_hit_at).total_seconds()
+    if elapsed < QUOTA_WAIT_S:
+        logger.debug("Quota resume pending: %.0fs / %.0fs elapsed", elapsed, QUOTA_WAIT_S)
+        return
+
+    pending_ids = resume_state.get("pending_ids", [])
+    run_date = resume_state.get("run_date", datetime.now(tz=TZ_TAIPEI).strftime("%Y-%m-%d"))
+    SCORE_RESUME_FLAG.unlink(missing_ok=True)
+
     try:
         SCORES_DIR.mkdir(parents=True, exist_ok=True)
         SCORING_IN_PROGRESS_FLAG.write_text(
             datetime.now(tz=TZ_TAIPEI).isoformat(), encoding="utf-8"
         )
-        FORCE_REFRESH_FLAG.unlink(missing_ok=True)  # consume the request
-        logger.info("force_refresh: flag detected, running forced score_job")
-        score_job(force=True)
+        logger.info("quota_resume: resuming %d stocks for %s", len(pending_ids), run_date)
+        _resume_score_job(pending_ids, run_date)
     except Exception as exc:
-        logger.error("force_refresh_watch_job failed: %s", exc)
+        logger.error("quota_resume_job failed: %s", exc)
     finally:
         SCORING_IN_PROGRESS_FLAG.unlink(missing_ok=True)
 
@@ -387,6 +546,22 @@ def daily_maintenance_job() -> None:
 
 
 if __name__ == "__main__":
+    # Clean up any stale flag left over from a previous process crash.
+    # .scoring_in_progress is only meaningful while THIS process is running;
+    # .score_resume is intentionally persistent and will be picked up by the
+    # watch job after QUOTA_WAIT_S seconds.
+    if SCORING_IN_PROGRESS_FLAG.exists():
+        SCORING_IN_PROGRESS_FLAG.unlink(missing_ok=True)
+        logger.info("Startup: removed stale .scoring_in_progress flag")
+    if SCORE_RESUME_FLAG.exists():
+        state = _read_resume_state()
+        if state:
+            logger.info(
+                "Startup: quota-resume state found (%d stocks for %s) — "
+                "will trigger via watch job after quota wait",
+                len(state.get("pending_ids", [])), state.get("run_date", "?"),
+            )
+
     # 啟動時立即抓一次最新資料，避免容器重啟後要等到下個 cron trigger 才有資料。
     # is_closing=True 繞過盤中時間限制，週末 / 盤後均可執行（total_volume=0 保護仍有效）。
     check_storage()

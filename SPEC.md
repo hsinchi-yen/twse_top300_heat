@@ -1,12 +1,12 @@
 # Spec: 台股熱力圖 Dashboard
 
-> Updated: 2026-06-11
+> Updated: 2026-06-16
 > This spec reflects the current implementation, including legacy route names that remain in service.
 
 ## Objective
 
 建立一個可長時間連續運行的台股熱力圖 Dashboard：
-- 股票主畫面使用固定 `480` 檔顯示池
+- 股票主畫面使用固定 `600` 檔顯示池
 - 提供 `成交量`、`週轉率`、`買進評分` 三種股票視角
 - 提供獨立 ETF 視圖
 - 部署於 Yocto ARM64，依賴 SQLite + Docker + `--network host`
@@ -15,14 +15,14 @@
 
 | Mode | Data source | Sort rule |
 |---|---|---|
-| `volume` | `/api/stocks/top100?mode=volume&limit=480` | backend `volume_rank` |
-| `turnover` | same 480-stock payload as `volume` | frontend re-sort by `turnover_rate` |
-| `buy_score` | same 480-stock payload + `/api/scores` | frontend re-sort by buy score |
+| `volume` | `/api/stocks/top100?mode=volume&limit=600` | backend `volume_rank` |
+| `turnover` | same 600-stock payload as `volume` | frontend re-sort by `turnover_rate` |
+| `buy_score` | same 600-stock payload + `/api/scores` | frontend re-sort by buy score |
 | `etf` | `/api/etf?sort_by=turnover|asset_scale&limit=300` | backend ETF ranks |
 
 ## Core invariants
 
-1. Frontend stock view always fetches `mode=volume&limit=480`
+1. Frontend stock view always fetches `mode=volume&limit=600`
 2. Buy-score computation lives only in `crawler/`
 3. Force refresh is file-based and non-blocking
 4. Buy-score cache writes are atomic `.tmp -> rename`
@@ -100,7 +100,7 @@ TWSE/TPEX/Yahoo + FinMind issue shares
   -> merge_and_rank()
   -> SQLite stock_ranks
   -> GET /api/stocks/top100
-  -> frontend volume payload (limit=480)
+  -> frontend volume payload (limit=600)
   -> client-side reorder for turnover / buy_score
 ```
 
@@ -136,7 +136,7 @@ Query params:
 
 Implementation notes:
 - Route name is historical; it is not limited to 100 rows
-- Frontend stock UI always uses `mode=volume&limit=480`
+- Frontend stock UI always uses `mode=volume&limit=600`
 - `market_open` is computed from current Taipei time (`Mon-Fri`, `09:00-13:30`)
 - `updated_at` is the API response timestamp, not the trade-source timestamp
 - Supports `ETag` + `Cache-Control`
@@ -176,6 +176,11 @@ Behavior:
 - `force=true` writes a refresh flag if no fetch is already active
 - `X-FinMind-Token` header is accepted but ignored
 - `fetching=true` when `.scoring_in_progress` or `.force_refresh` exists
+- a coordination flag older than `SCORING_FLAG_STALE_S` is treated as orphaned
+  (crashed mid-run): it no longer counts toward `fetching`, so a later
+  `force=true` can take over and the frontend button is not pinned disabled
+- `date` / `generated_at` feed the frontend "評分更新 <date> <time>" label;
+  while fetching, the frontend renders a progress bar (scored / display-pool)
 
 Example:
 
@@ -283,6 +288,11 @@ Updates a single `sector_map` entry.
 - Partial persistence: write every 50 successful scores
 - Full-fetch failure for a stock: do not persist `0/24`
 - File retention: keep latest 7 JSON files
+- Orphan recovery: a `.scoring_in_progress` left by a crashed run is cleared once
+  older than `SCORING_FLAG_STALE_S` (crawler on startup + every-minute watch job;
+  backend ignores it for `fetching` past the same age)
+- Frontend buy-score view: progress bar + "評分更新 <date> <time>" in the topbar;
+  each card shows 成交量 ｜ 週轉率 ｜ 漲跌幅
 
 ## Data retention
 
@@ -299,11 +309,12 @@ Updates a single `sector_map` entry.
 | `DATABASE_URL` | implementation-specific | SQLite location |
 | `FINMIND_TOKEN` | `""` | crawler-only buy-score token |
 | `SCORES_DIR` | `/app/data/buy_scores` | shared score JSON directory |
-| `SCORE_CANDIDATE_LIMIT` | `480` | score candidate pool limit |
+| `SCORE_CANDIDATE_LIMIT` | `600` | score candidate pool limit |
 | `BUY_SCORE_REQUEST_DELAY` | `1.2` | delay between stocks |
 | `BUY_SCORE_FETCH_DELAY` | `0.4` | delay between FinMind datasets |
 | `BUY_SCORE_QUOTA_WAIT_S` | `3600` | wait after quota exhaustion |
-| `BUY_SCORE_QUOTA_MAX_CYCLES` | `24` | max quota-resume passes |
+| `BUY_SCORE_QUOTA_MAX_CYCLES` | `24` | legacy bound; quota-resume currently loops without an enforced upper limit until all stocks are scored |
+| `SCORING_FLAG_STALE_S` | `10800` | age after which `.scoring_in_progress` / `.force_refresh` are treated as orphaned and cleared (backend + crawler) |
 | `BUY_SCORE_GOODINFO_ENABLED` | `false` | optional Goodinfo scoring inputs |
 | `ETF_KEEP_DAYS` | `90` | ETF history retention |
 | `ALLOWED_ORIGINS` | `""` | CORS allowlist; empty currently maps to `*` |
@@ -346,7 +357,7 @@ All production containers use `--network host`.
 
 ### Always
 
-- Keep stock frontend fetch fixed to `mode=volume&limit=480`
+- Keep stock frontend fetch fixed to `mode=volume&limit=600`
 - Keep buy-score ownership in crawler
 - Preserve atomic score writes
 - Preserve ETF as a separate endpoint and polling path

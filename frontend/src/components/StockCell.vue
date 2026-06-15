@@ -24,9 +24,10 @@
       <span v-if="scoreLabel !== null" class="cell-score mono"> - {{ scoreLabel }}</span>
     </div>
 
-    <!-- 底部：數值 + 漲跌幅 -->
+    <!-- 底部：數值（買進評分模式插入週轉率）+ 漲跌幅 -->
     <div class="cell-bottom">
       <div class="cell-value mono">{{ valueLabel }}</div>
+      <div v-if="mode === 'buy_score'" class="cell-turnover mono">{{ turnoverLabel }}</div>
       <div class="cell-pct mono" :class="pctClass">{{ formatPct(stock.price_change_pct) }}</div>
     </div>
   </div>
@@ -73,6 +74,12 @@ const valueLabel = computed(() => {
     : zhang >= 1000
       ? `${(zhang / 1000).toFixed(1)}K`
       : `${zhang}張`
+})
+
+// 週轉率（買進評分模式下，顯示於成交量與漲跌幅之間）
+const turnoverLabel = computed(() => {
+  const r = props.stock.turnover_rate
+  return r != null ? `${r.toFixed(2)}%` : '—'
 })
 
 // null    → never requested scores (show nothing)
@@ -272,6 +279,14 @@ function formatPrice(p) {
   white-space: nowrap;
 }
 
+.cell-turnover {
+  font-size: 0.62rem;
+  color: var(--cell-value-color);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
 .cell-pct {
   font-size: 0.78rem;
   font-weight: 700;
@@ -346,7 +361,8 @@ function formatPrice(p) {
     font-size: 0.52rem;
   }
 
-  .cell-value {
+  .cell-value,
+  .cell-turnover {
     font-size: 0.56rem;
   }
 

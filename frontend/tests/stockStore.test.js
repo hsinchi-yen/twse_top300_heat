@@ -62,6 +62,27 @@ describe('stockStore — buy score state', () => {
     expect(store.scoresLoaded).toBe(true)
     expect(store.scoresFetching).toBe(true)
   })
+
+  it('setScoreMeta stores date and generated_at', () => {
+    const store = useStockStore()
+    store.setScoreMeta('2026-06-01', '2026-06-01T03:42:18+08:00')
+    expect(store.scoreDate).toBe('2026-06-01')
+    expect(store.scoreGeneratedAt).toBe('2026-06-01T03:42:18+08:00')
+  })
+
+  it('setScoresStalled toggles the stalled flag', () => {
+    const store = useStockStore()
+    expect(store.scoresStalled).toBe(false)
+    store.setScoresStalled(true)
+    expect(store.scoresStalled).toBe(true)
+  })
+
+  it('setScores clears the stalled flag', () => {
+    const store = useStockStore()
+    store.setScoresStalled(true)
+    store.setScores({ '2330': { score: 18, max_score: 24 } })
+    expect(store.scoresStalled).toBe(false)
+  })
 })
 
 describe('stockStore — mode', () => {

@@ -14,7 +14,7 @@
         class="stock-grid"
         :style="gridStyle"
         :data-size="gridSize"
-        :data-density="isMobile ? mobileDensity : (isTablet ? tabletDensity : null)"
+        :data-density="isMobile ? mobileDensity : null"
         @pointerdown="onPointerDown"
         @pointerup="onPointerUp"
       >
@@ -98,15 +98,15 @@ import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useStockStore } from '../stores/stockStore'
 import { useBreakpoint } from '../composables/useBreakpoint'
-import { MAX_STOCKS, MOBILE_DENSITY, TABLET_DENSITY } from '../constants'
+import { MAX_STOCKS, MOBILE_DENSITY } from '../constants'
 import StockCell from './StockCell.vue'
 
 const store = useStockStore()
 const {
-  sectors, loading, error, mode, gridSize, mobileDensity, tabletDensity,
+  sectors, loading, error, mode, gridSize, mobileDensity,
   scores, scoresLoaded, scoresFetching,
 } = storeToRefs(store)
-const { isMobile, isTablet } = useBreakpoint()
+const { isMobile } = useBreakpoint()
 
 const page = ref(0)
 const searchQuery = ref('')
@@ -116,13 +116,11 @@ let highlightTimer = null
 
 // ── grid geometry ──
 const cols = computed(() => {
-  if (isMobile.value)  return MOBILE_DENSITY[mobileDensity.value].cols
-  if (isTablet.value)  return TABLET_DENSITY[tabletDensity.value].cols
+  if (isMobile.value) return MOBILE_DENSITY[mobileDensity.value].cols
   return gridSize.value
 })
 const rows = computed(() => {
-  if (isMobile.value)  return MOBILE_DENSITY[mobileDensity.value].rows
-  if (isTablet.value)  return TABLET_DENSITY[tabletDensity.value].rows
+  if (isMobile.value) return MOBILE_DENSITY[mobileDensity.value].rows
   return gridSize.value
 })
 const pageSize = computed(() => cols.value * rows.value)
@@ -448,7 +446,8 @@ function clearSearch() {
   .stock-grid:not([data-density="3x3"]) :deep(.cell-price)  { font-size: 1.36rem; }
   .stock-grid:not([data-density="3x3"]) :deep(.cell-name)   { font-size: 1.45rem; }
   .stock-grid:not([data-density="3x3"]) :deep(.cell-score)  { font-size: 1.16rem; }
-  .stock-grid:not([data-density="3x3"]) :deep(.cell-value)  { font-size: 1.24rem; }
+  .stock-grid:not([data-density="3x3"]) :deep(.cell-value),
+  .stock-grid:not([data-density="3x3"]) :deep(.cell-turnover) { font-size: 1.24rem; }
   .stock-grid:not([data-density="3x3"]) :deep(.cell-pct)    { font-size: 1.56rem; }
 }
 
@@ -460,7 +459,8 @@ function clearSearch() {
   .stock-grid[data-density="3x3"] :deep(.cell-price)  { font-size: 1.02rem; }
   .stock-grid[data-density="3x3"] :deep(.cell-name)   { font-size: 1.12rem; }
   .stock-grid[data-density="3x3"] :deep(.cell-score)  { font-size: 0.87rem; }
-  .stock-grid[data-density="3x3"] :deep(.cell-value)  { font-size: 0.93rem; }
+  .stock-grid[data-density="3x3"] :deep(.cell-value),
+  .stock-grid[data-density="3x3"] :deep(.cell-turnover) { font-size: 0.93rem; }
   .stock-grid[data-density="3x3"] :deep(.cell-pct)    { font-size: 1.17rem; }
 }
 

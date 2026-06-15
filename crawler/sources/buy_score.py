@@ -9,13 +9,12 @@ volume with backend).
 Rate-limit strategy (分時 + 額度耗盡續抓):
   - REQUEST_DELAY seconds between stocks; the engine also staggers each FinMind
     dataset call by BUY_SCORE_FETCH_DELAY.
-  - When FinMind quota is exhausted (FinMindError, HTTP 402) the batch writes
-    the partial result, sleeps BUY_SCORE_QUOTA_WAIT_S (default 1 h), then resumes
-    with only the still-unscored stocks. Repeats up to BUY_SCORE_QUOTA_MAX_CYCLES
-    (default 24, ≈ one day).
+  - When FinMind quota is exhausted (FinMindError, HTTP 402) the batch raises
+    QuotaExhaustedMidBatch; the CALLER (main.py) persists remaining stock IDs to
+    .score_resume and reschedules via the watch job after QUOTA_WAIT_S (default 1 h).
+    This is file-based and process-restart-resilient — no cycle count limit.
   - A stock whose data all fails to fetch (no analyzable criterion) is NOT
-    persisted as a misleading 0/24 — it returns None (frontend shows N/A) and is
-    retried on the next quota cycle.
+    persisted as a misleading 0/24 — it returns None (frontend shows N/A).
 """
 
 import json
@@ -36,9 +35,28 @@ SCORES_DIR = Path(os.getenv("SCORES_DIR", "/app/data/buy_scores"))
 FINMIND_TOKEN = os.getenv("FINMIND_TOKEN", "")
 TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 REQUEST_DELAY = float(os.getenv("BUY_SCORE_REQUEST_DELAY", "1.2"))
-# Quota-exhaustion resume: wait this long then continue with unscored stocks.
+# How long to wait after quota exhaustion before resuming (default: 1 hour).
+# The wait is now managed externally (file-based) so this constant is used by
+# the caller (main.py) rather than by batch_fetch_scores itself.
 QUOTA_WAIT_S = float(os.getenv("BUY_SCORE_QUOTA_WAIT_S", "3600"))
-QUOTA_MAX_CYCLES = int(os.getenv("BUY_SCORE_QUOTA_MAX_CYCLES", "24"))
+
+
+class QuotaExhaustedMidBatch(Exception):
+    """Raised by batch_fetch_scores when FinMind quota is hit mid-batch.
+
+    remaining_ids: stocks not yet scored (quota-hit stock + all subsequent).
+    scored:        scores accumulated before the quota hit.
+
+    The caller should persist remaining_ids to disk and retry after QUOTA_WAIT_S
+    seconds so the process can resume even after a container restart.
+    """
+
+    def __init__(self, remaining_ids: list[str], scored: dict):
+        self.remaining_ids = remaining_ids
+        self.scored = scored
+        super().__init__(
+            f"FinMind quota exhausted — {len(remaining_ids)} stocks remaining"
+        )
 MAX_KEEP_DAYS = 7
 
 
@@ -76,14 +94,15 @@ def batch_fetch_scores(
     batch_size: int = 50,
     token: str | None = None,
 ) -> dict[str, dict]:
-    """Compute buy scores for all stocks sequentially with REQUEST_DELAY pacing.
+    """Compute buy scores sequentially with REQUEST_DELAY pacing.
 
-    Quota-aware: on FinMindError (HTTP 402) the current progress is flushed via
-    on_batch, then the batch sleeps QUOTA_WAIT_S and resumes with the stocks not
-    yet scored — up to QUOTA_MAX_CYCLES cycles.
+    On FinMindError (quota exhaustion): flushes accumulated progress via on_batch,
+    then raises QuotaExhaustedMidBatch so the CALLER can persist the remaining
+    stock IDs to disk and reschedule a resume after QUOTA_WAIT_S seconds.
+    This keeps the function non-blocking and process-restart-resilient.
 
-    on_batch: optional callback invoked with the accumulated scores dict every
-    batch_size successes (and at the end of each pass) for incremental persistence.
+    on_batch: called with the full accumulated scores dict every batch_size
+    successes and at the very end of the run (for incremental JSON persistence).
     """
     if not stock_ids:
         return {}
@@ -92,56 +111,28 @@ def batch_fetch_scores(
     scores: dict[str, dict] = {}
     total = len(stock_ids)
 
-    for cycle in range(1, QUOTA_MAX_CYCLES + 1):
-        pending = [sid for sid in stock_ids if sid not in scores]
-        if not pending:
-            break
-
-        if cycle > 1:
-            logger.info(
-                "buy_score cycle %d/%d: resuming %d unscored stocks",
-                cycle, QUOTA_MAX_CYCLES, len(pending),
+    for i, sid in enumerate(stock_ids):
+        try:
+            result = fetch_buy_score(sid, token=token)
+        except FinMindError as exc:
+            logger.warning(
+                "buy_score quota exhausted at %s (%d/%d scored): %s",
+                sid, len(scores), total, exc,
             )
-
-        quota_hit = False
-        for i, sid in enumerate(pending):
-            try:
-                result = fetch_buy_score(sid, token=token)
-            except FinMindError as exc:
-                logger.warning(
-                    "buy_score quota exhausted at %s (cycle %d, %d/%d scored): %s",
-                    sid, cycle, len(scores), total, exc,
-                )
-                quota_hit = True
-                break
-
-            if result is not None:
-                scores[sid] = result
-            logger.info("buy_score %d/%d  ok=%d  id=%s", i + 1, len(pending), len(scores), sid)
-
-            if on_batch is not None and (len(scores) % batch_size == 0 or i == len(pending) - 1):
+            if on_batch is not None:
                 on_batch(scores)
+            remaining = [s for s in stock_ids[i:] if s not in scores]
+            raise QuotaExhaustedMidBatch(remaining, scores) from exc
 
-            if i < len(pending) - 1:
-                time.sleep(REQUEST_DELAY)
+        if result is not None:
+            scores[sid] = result
+        logger.info("buy_score %d/%d  ok=%d  id=%s", i + 1, total, len(scores), sid)
 
-        # Flush whatever we have at the end of this pass.
-        if on_batch is not None:
+        if on_batch is not None and (len(scores) % batch_size == 0 or i == total - 1):
             on_batch(scores)
 
-        if not quota_hit:
-            # Full pass completed; any remaining stocks are non-quota failures
-            # (shown as N/A) and are not retried.
-            break
-
-        if len([sid for sid in stock_ids if sid not in scores]) == 0:
-            break
-
-        logger.info(
-            "buy_score: quota wait %.0fs before resuming (cycle %d/%d, %d/%d scored)",
-            QUOTA_WAIT_S, cycle, QUOTA_MAX_CYCLES, len(scores), total,
-        )
-        time.sleep(QUOTA_WAIT_S)
+        if i < total - 1:
+            time.sleep(REQUEST_DELAY)
 
     logger.info("batch_fetch_scores done: %d/%d stocks scored", len(scores), total)
     return scores

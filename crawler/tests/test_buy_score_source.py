@@ -19,6 +19,7 @@ from sources.buy_score import (
     batch_fetch_scores,
     write_scores,
     load_latest_scores,
+    QuotaExhaustedMidBatch,
 )
 from sources.finmind_client import FinMindError
 
@@ -97,7 +98,7 @@ class TestBatchFetchScores:
         with patch("sources.buy_score.fetch_buy_score", return_value={"score": 1, "max_score": 24}), \
              patch("sources.buy_score.time.sleep") as mock_sleep:
             batch_fetch_scores(["2330", "2317", "2454"])
-        # 3 stocks, one pass, no quota wait → N-1 = 2 sleeps
+        # 3 stocks → N-1 = 2 inter-request sleeps
         assert mock_sleep.call_count == 2
 
     def test_no_sleep_for_single_stock(self):
@@ -110,8 +111,8 @@ class TestBatchFetchScores:
         result = batch_fetch_scores([])
         assert result == {}
 
-    def test_quota_exhaustion_waits_then_resumes_unscored(self):
-        """On FinMindError, batch waits QUOTA_WAIT_S then resumes only unscored stocks."""
+    def test_quota_exhaustion_raises_with_remaining_ids(self):
+        """On FinMindError, batch raises QuotaExhaustedMidBatch with all unscored stocks."""
         calls = {"n": 0}
 
         def _mock(sid, token=None):
@@ -121,26 +122,37 @@ class TestBatchFetchScores:
             return {"score": 5, "max_score": 24}
 
         with patch("sources.buy_score.fetch_buy_score", side_effect=_mock), \
-             patch("sources.buy_score.QUOTA_WAIT_S", 0), \
-             patch("sources.buy_score.time.sleep") as mock_sleep:
-            result = batch_fetch_scores(["A", "B"])
+             patch("sources.buy_score.time.sleep"):
+            with pytest.raises(QuotaExhaustedMidBatch) as exc_info:
+                batch_fetch_scores(["A", "B"])
 
-        # Cycle 1: A raises quota → abort. Cycle 2: A, B both succeed.
-        assert result == {"A": {"score": 5, "max_score": 24}, "B": {"score": 5, "max_score": 24}}
-        # One of the sleeps must be the quota wait (QUOTA_WAIT_S patched to 0).
-        assert mock_sleep.call_count >= 1
+        exc = exc_info.value
+        # A hit quota (first call), B not tried yet — both must be in remaining_ids.
+        assert "A" in exc.remaining_ids
+        assert "B" in exc.remaining_ids
+        assert exc.scored == {}
 
-    def test_quota_gives_up_after_max_cycles(self):
-        """If quota never clears, batch stops after QUOTA_MAX_CYCLES without hanging."""
+    def test_quota_hit_preserves_prior_scores(self):
+        """Scores accumulated before the quota hit are accessible in exc.scored."""
         def _mock(sid, token=None):
-            raise FinMindError("quota exceeded")
+            if sid == "C":
+                raise FinMindError("quota exceeded")
+            return {"score": 5, "max_score": 24}
 
         with patch("sources.buy_score.fetch_buy_score", side_effect=_mock), \
-             patch("sources.buy_score.QUOTA_WAIT_S", 0), \
-             patch("sources.buy_score.QUOTA_MAX_CYCLES", 3), \
              patch("sources.buy_score.time.sleep"):
-            result = batch_fetch_scores(["A"])
-        assert result == {}
+            with pytest.raises(QuotaExhaustedMidBatch) as exc_info:
+                batch_fetch_scores(["A", "B", "C", "D"])
+
+        exc = exc_info.value
+        assert exc.scored == {
+            "A": {"score": 5, "max_score": 24},
+            "B": {"score": 5, "max_score": 24},
+        }
+        assert "C" in exc.remaining_ids
+        assert "D" in exc.remaining_ids
+        assert "A" not in exc.remaining_ids
+        assert "B" not in exc.remaining_ids
 
 
 class TestWriteScores:

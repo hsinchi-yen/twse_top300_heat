@@ -14,6 +14,7 @@
           <span v-if="!marketOpen" class="badge badge-closed">◼ 已收盤</span>
           <span v-else class="badge badge-open">● 盤中</span>
           <span class="last-updated mono">{{ formattedTime }}</span>
+          <ScoreProgress v-if="mode === 'buy_score'" />
           <ScoreRefreshBtn />
           <TokenSettings />
           <button
@@ -32,11 +33,9 @@
           :mode="mode"
           :grid-size="gridSize"
           :mobile-density="mobileDensity"
-          :tablet-density="tabletDensity"
           @mode-change="onModeChange"
           @grid-size-change="onGridSizeChange"
           @density-change="onDensityChange"
-          @tablet-density-change="onTabletDensityChange"
         />
       </div>
     </header>
@@ -62,13 +61,14 @@ import HeatmapGrid from './components/HeatmapGrid.vue'
 import EtfGrid from './components/EtfGrid.vue'
 import TokenSettings from './components/TokenSettings.vue'
 import ScoreRefreshBtn from './components/ScoreRefreshBtn.vue'
+import ScoreProgress from './components/ScoreProgress.vue'
 
 const isEmbedded = import.meta.env.VITE_EMBEDDED === 'true'
 
 const store = useStockStore()
 const themeStore = useThemeStore()
 const {
-  mode, gridSize, mobileDensity, tabletDensity,
+  mode, gridSize, mobileDensity,
   marketOpen, updatedAt, date: dataDate, etfDate, etfUpdatedAt,
   scoresLoaded, scoresFetching,
 } = storeToRefs(store)
@@ -93,9 +93,6 @@ function onDensityChange(d) {
   store.setMobileDensity(d)
 }
 
-function onTabletDensityChange(d) {
-  store.setTabletDensity(d)
-}
 
 const todayStr = new Date().toLocaleDateString('sv-SE')
 

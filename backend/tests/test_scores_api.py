@@ -7,7 +7,9 @@ the serving contract and the flag-file coordination.
 """
 
 import json
+import os
 import tempfile
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -169,3 +171,51 @@ class TestForceRefresh:
                 assert scores_mod._is_fetching() is False
                 progress.write_text("x", encoding="utf-8")
                 assert scores_mod._is_fetching() is True
+
+
+class TestStaleFlagRecovery:
+    """An orphaned flag from a crashed run must not pin fetching=true forever."""
+
+    def _make_flag(self, path: Path, age_seconds: float):
+        path.write_text("x", encoding="utf-8")
+        past = time.time() - age_seconds
+        os.utime(path, (past, past))
+
+    def test_fresh_in_progress_flag_reports_fetching(self):
+        from routers import scores as scores_mod
+        with tempfile.TemporaryDirectory() as tmpdir:
+            progress = Path(tmpdir) / ".scoring_in_progress"
+            force = Path(tmpdir) / ".force_refresh"
+            with patch.object(scores_mod, "SCORING_IN_PROGRESS_FLAG", progress), \
+                 patch.object(scores_mod, "FORCE_REFRESH_FLAG", force), \
+                 patch.object(scores_mod, "SCORING_FLAG_STALE_S", 10800):
+                self._make_flag(progress, age_seconds=60)
+                assert scores_mod._is_fetching() is True
+
+    def test_stale_in_progress_flag_ignored(self):
+        from routers import scores as scores_mod
+        with tempfile.TemporaryDirectory() as tmpdir:
+            progress = Path(tmpdir) / ".scoring_in_progress"
+            force = Path(tmpdir) / ".force_refresh"
+            with patch.object(scores_mod, "SCORING_IN_PROGRESS_FLAG", progress), \
+                 patch.object(scores_mod, "FORCE_REFRESH_FLAG", force), \
+                 patch.object(scores_mod, "SCORING_FLAG_STALE_S", 10800):
+                self._make_flag(progress, age_seconds=20000)
+                assert scores_mod._is_fetching() is False
+
+    def test_force_resumes_after_stale_flag(self):
+        """With only a stale flag present, force=true must re-request a refresh."""
+        from routers import scores as scores_mod
+        with tempfile.TemporaryDirectory() as tmpdir:
+            scores_dir = Path(tmpdir)
+            progress = scores_dir / ".scoring_in_progress"
+            force = scores_dir / ".force_refresh"
+            with patch.object(scores_mod, "SCORING_IN_PROGRESS_FLAG", progress), \
+                 patch.object(scores_mod, "FORCE_REFRESH_FLAG", force), \
+                 patch.object(scores_mod, "SCORING_FLAG_STALE_S", 10800), \
+                 patch("routers.scores._load", return_value=SAMPLE_PAYLOAD), \
+                 patch("routers.scores._request_force_refresh") as mock_req:
+                self._make_flag(progress, age_seconds=20000)
+                resp = client.get("/api/scores?force=true")
+        assert resp.status_code == 200
+        mock_req.assert_called_once()

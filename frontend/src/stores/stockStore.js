@@ -30,6 +30,9 @@ export const useStockStore = defineStore('stock', () => {
   const scores = ref({})          // {stock_id: {score, max_score}}
   const scoresLoaded = ref(false)
   const scoresFetching = ref(false)
+  const scoreDate = ref('')        // 評分資料日期 (from /api/scores `date`)
+  const scoreGeneratedAt = ref('') // 評分完成時間 (from /api/scores `generated_at`)
+  const scoresStalled = ref(false) // background fetch appears stuck → allow manual retry
   // ── ETF state ──
   const etfs = ref([])
   const etfDate = ref('')
@@ -99,6 +102,7 @@ export const useStockStore = defineStore('stock', () => {
     scores.value = payload
     scoresLoaded.value = true
     scoresFetching.value = false
+    scoresStalled.value = false
   }
 
   // Partial update during background fetch — shows what we have, keeps fetching indicator
@@ -111,6 +115,16 @@ export const useStockStore = defineStore('stock', () => {
     scoresFetching.value = val
   }
 
+  // 評分資料的日期與完成時間（來自 /api/scores 的 date / generated_at）
+  function setScoreMeta(date, generatedAt) {
+    scoreDate.value = date ?? ''
+    scoreGeneratedAt.value = generatedAt ?? ''
+  }
+
+  function setScoresStalled(val) {
+    scoresStalled.value = val
+  }
+
   return {
     gridSize, setGridSize,
     mobileDensity, setMobileDensity,
@@ -119,6 +133,7 @@ export const useStockStore = defineStore('stock', () => {
     setMode, setData, setLoading, setError,
     etfs, etfDate, etfUpdatedAt, etfLoading, etfError, etfSortBy,
     setEtfData, setEtfLoading, setEtfError, setEtfSortBy,
-    scores, scoresLoaded, scoresFetching, setScores, setPartialScores, setScoresFetching,
+    scores, scoresLoaded, scoresFetching, scoreDate, scoreGeneratedAt, scoresStalled,
+    setScores, setPartialScores, setScoresFetching, setScoreMeta, setScoresStalled,
   }
 })

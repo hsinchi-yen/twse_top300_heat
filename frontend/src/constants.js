@@ -1,5 +1,5 @@
 // Display pool size (volume Top N). Backend score candidate pool is separate.
-export const MAX_STOCKS = 480
+export const MAX_STOCKS = 600
 
 // Mobile per-page card density options
 export const MOBILE_DENSITY = {

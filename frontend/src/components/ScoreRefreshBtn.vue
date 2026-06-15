@@ -1,10 +1,9 @@
 <template>
   <button
-    v-if="hasToken"
     class="score-refresh-btn"
-    :class="{ spinning: scoresFetching }"
-    :disabled="scoresFetching"
-    :title="scoresFetching ? '評分更新中…' : '重新抓取買入評分'"
+    :class="{ spinning: scoresFetching && !scoresStalled }"
+    :disabled="scoresFetching && !scoresStalled"
+    :title="btnTitle"
     @click="onClick"
   >
     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -18,15 +17,21 @@
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useStockStore } from '../stores/stockStore'
-import { forceRefreshScores, getStoredToken } from '../composables/useScoreData'
+import { forceRefreshScores } from '../composables/useScoreData'
 
 const store = useStockStore()
-const { scoresFetching } = storeToRefs(store)
+const { scoresFetching, scoresStalled } = storeToRefs(store)
 
-const hasToken = computed(() => !!getStoredToken())
+const btnTitle = computed(() => {
+  if (scoresStalled.value) return '評分似乎停滯，點擊重試'
+  if (scoresFetching.value) return '評分更新中…'
+  return '重新抓取買入評分'
+})
 
+// Allow a click when idle, or when a background fetch appears stalled (the
+// backend stale-flag timeout lets a fresh force refresh take over).
 function onClick() {
-  if (!scoresFetching.value) {
+  if (!scoresFetching.value || scoresStalled.value) {
     forceRefreshScores()
   }
 }
