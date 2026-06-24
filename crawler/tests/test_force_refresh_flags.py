@@ -55,6 +55,21 @@ def test_missing_flag_is_noop(tmp_path):
         assert not flag.exists()
 
 
+def test_mark_and_clear_scoring_flags(tmp_path):
+    """score_job owns the in-progress flag so monthly/force/resume all surface it."""
+    in_progress = tmp_path / ".scoring_in_progress"
+    progress = tmp_path / ".score_progress"
+    with patch.object(main, "SCORES_DIR", tmp_path), \
+         patch.object(main, "SCORING_IN_PROGRESS_FLAG", in_progress):
+        main._mark_scoring_in_progress()
+        assert in_progress.exists()
+        progress.write_text('{"done":1,"total":600}', encoding="utf-8")
+        with patch("sources.buy_score.SCORE_PROGRESS_FLAG", progress):
+            main._clear_scoring_flags()
+        assert not in_progress.exists()
+        assert not progress.exists()
+
+
 def test_score_job_helpers_are_imported():
     """Guard against a missing import in score_job's force path.
 

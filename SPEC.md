@@ -175,7 +175,9 @@ Behavior:
 - backend only reads the newest JSON in `SCORES_DIR`
 - `force=true` writes a refresh flag if no fetch is already active
 - `X-FinMind-Token` header is accepted but ignored
-- `fetching=true` when `.scoring_in_progress` or `.force_refresh` exists
+- `fetching=true` when `.scoring_in_progress` or `.force_refresh` exists.
+  `score_job` / resume own `.scoring_in_progress`, so ALL scoring paths (monthly
+  cron, force refresh, quota-resume) surface fetching + progress identically
 - a coordination flag older than `SCORING_FLAG_STALE_S` is treated as orphaned
   (crashed mid-run): it no longer counts toward `fetching`, so a later
   `force=true` can take over and the frontend button is not pinned disabled

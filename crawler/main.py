@@ -309,23 +309,22 @@ def _resume_score_job(pending_ids: list[str], run_date: str) -> None:
         write_scores(merged, run_date)
         logger.info("_resume_score_job partial write: %d scored", len(merged))
 
+    _mark_scoring_in_progress()
     try:
         new_scores = batch_fetch_scores(
             pending_ids, on_batch=_write_partial, on_progress=write_progress,
         )
+        merged_scores = {**existing_scores, **new_scores}
+        write_scores(merged_scores, run_date)
+        logger.info("_resume_score_job done: %d stocks in final result for %s", len(merged_scores), run_date)
     except QuotaExhaustedMidBatch as exc:
         logger.warning(
             "_resume_score_job: quota hit again — %d stocks still pending, will retry in %.0fs",
             len(exc.remaining_ids), QUOTA_WAIT_S,
         )
         _write_resume_state(exc.remaining_ids, run_date)
-        clear_progress()
-        return
-
-    merged_scores = {**existing_scores, **new_scores}
-    write_scores(merged_scores, run_date)
-    clear_progress()
-    logger.info("_resume_score_job done: %d stocks in final result for %s", len(merged_scores), run_date)
+    finally:
+        _clear_scoring_flags()
 
 
 def score_job(force: bool = False) -> None:
@@ -409,10 +408,14 @@ def score_job(force: bool = False) -> None:
             len(merged), len(all_stock_ids),
         )
 
+    _mark_scoring_in_progress()
     try:
         new_scores = batch_fetch_scores(
             stock_ids, on_batch=_write_partial, on_progress=write_progress,
         )
+        merged_scores = {**_partial_baseline, **new_scores}
+        write_scores(merged_scores, today)
+        logger.info("score_job done: %d/%d stocks scored", len(merged_scores), len(all_stock_ids))
     except QuotaExhaustedMidBatch as exc:
         logger.warning(
             "score_job: quota exhausted — %d/%d stocks remain unscored. "
@@ -420,13 +423,26 @@ def score_job(force: bool = False) -> None:
             len(exc.remaining_ids), len(all_stock_ids), QUOTA_WAIT_S,
         )
         _write_resume_state(exc.remaining_ids, today)
-        clear_progress()
-        return
+    finally:
+        _clear_scoring_flags()
 
-    merged_scores = {**_partial_baseline, **new_scores}
-    write_scores(merged_scores, today)
+
+def _mark_scoring_in_progress() -> None:
+    """Signal the backend (fetching=true) that a scoring run is active.
+
+    Owned by score_job / _resume_score_job so every path — monthly cron, force
+    refresh, and quota-resume — surfaces fetching + live progress identically.
+    """
+    SCORES_DIR.mkdir(parents=True, exist_ok=True)
+    SCORING_IN_PROGRESS_FLAG.write_text(
+        datetime.now(tz=TZ_TAIPEI).isoformat(), encoding="utf-8"
+    )
+
+
+def _clear_scoring_flags() -> None:
+    """Clear the in-progress + live-progress markers when a run finishes."""
+    SCORING_IN_PROGRESS_FLAG.unlink(missing_ok=True)
     clear_progress()
-    logger.info("score_job done: %d/%d stocks scored", len(merged_scores), len(all_stock_ids))
 
 
 def _clear_stale_in_progress() -> None:
@@ -460,7 +476,8 @@ def force_refresh_watch_job() -> None:
       2. SCORE_RESUME_FLAG exists AND QUOTA_WAIT_S has elapsed since the quota hit
          → resume scoring for the saved remaining stock IDs.
 
-    Both paths write SCORING_IN_PROGRESS_FLAG so the backend reports fetching=true.
+    score_job / _resume_score_job own SCORING_IN_PROGRESS_FLAG (so the backend
+    reports fetching=true) — this watcher only detects requests and dispatches.
     On quota hit inside either job, .score_resume is written and this function
     returns — the next eligible run (≥ QUOTA_WAIT_S later) picks it up again.
     This loop continues without an upper limit until all stocks are scored.
@@ -471,18 +488,12 @@ def force_refresh_watch_job() -> None:
     if FORCE_REFRESH_FLAG.exists():
         # Explicit refresh: discard any pending quota-resume and restart from scratch.
         SCORE_RESUME_FLAG.unlink(missing_ok=True)
+        FORCE_REFRESH_FLAG.unlink(missing_ok=True)
         try:
-            SCORES_DIR.mkdir(parents=True, exist_ok=True)
-            SCORING_IN_PROGRESS_FLAG.write_text(
-                datetime.now(tz=TZ_TAIPEI).isoformat(), encoding="utf-8"
-            )
-            FORCE_REFRESH_FLAG.unlink(missing_ok=True)
             logger.info("force_refresh: flag detected, running forced score_job")
             score_job(force=True)
         except Exception as exc:
             logger.error("force_refresh_watch_job failed: %s", exc)
-        finally:
-            SCORING_IN_PROGRESS_FLAG.unlink(missing_ok=True)
         return
 
     # Check for a quota-resume.
@@ -507,16 +518,10 @@ def force_refresh_watch_job() -> None:
     SCORE_RESUME_FLAG.unlink(missing_ok=True)
 
     try:
-        SCORES_DIR.mkdir(parents=True, exist_ok=True)
-        SCORING_IN_PROGRESS_FLAG.write_text(
-            datetime.now(tz=TZ_TAIPEI).isoformat(), encoding="utf-8"
-        )
         logger.info("quota_resume: resuming %d stocks for %s", len(pending_ids), run_date)
         _resume_score_job(pending_ids, run_date)
     except Exception as exc:
         logger.error("quota_resume_job failed: %s", exc)
-    finally:
-        SCORING_IN_PROGRESS_FLAG.unlink(missing_ok=True)
 
 
 def prune_old_stock_ranks(keep_days: int = 7) -> None:
