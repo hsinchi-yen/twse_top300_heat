@@ -481,6 +481,13 @@ def compute_buy_score(
         warning=None if eps_latest is not None else "EPS 資料不足",
     ))
 
+    # ── 衍生指標（不計分）：營收/EPS 轉強 ────────────────────────────────────
+    # 近3個月營收YoY全部>0% + 近3季EPS YoY至少2季正成長。純展示用途，不進 criteria/score。
+    fundamentals_uptrend = bool(
+        len(rev_yoy_values) == 3 and all(v > 0 for v in rev_yoy_values)
+        and eps_positive >= 2 and len(eps_yoy_values) >= 2
+    )
+
     # ── C6: |Sloan Ratio| < 0.15  [weight=1] ──────────────────────────────────
     sloan: float | None = None
     try:
@@ -970,4 +977,5 @@ def compute_buy_score(
         "warnings": warnings,
         "risk_criteria": risk_criteria,
         "risk_score": risk_score,
+        "fundamentals_uptrend": fundamentals_uptrend,
     }

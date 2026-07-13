@@ -115,6 +115,71 @@ class TestCriteriaScoring:
         assert result["eligible_count"] >= 1
 
 
+class TestFundamentalsUptrend:
+    """Display-only derived flag: 3-of-3 recent monthly revenue YoY > 0% AND
+    at least 2 of the 3 most recent quarterly EPS YoY > 0%. Not part of score.
+    """
+
+    @staticmethod
+    def _rising_revenue_df():
+        # 16 months of rising revenue → all of the last 3 YoY values positive.
+        months = pd.date_range("2024-01-01", periods=16, freq="MS")
+        revenue = [100 + i * 10 for i in range(16)]
+        return pd.DataFrame({
+            "date": [d.strftime("%Y-%m-%d") for d in months],
+            "month": [d.strftime("%Y-%m") for d in months],
+            "revenue": revenue,
+        })
+
+    @staticmethod
+    def _flat_then_dip_revenue_df():
+        # Last 3 YoY values: two positive, one negative (fails "all 3" rule).
+        months = pd.date_range("2023-01-01", periods=16, freq="MS")
+        revenue = [100] * 12 + [110, 120, 90, 130]
+        return pd.DataFrame({
+            "date": [d.strftime("%Y-%m-%d") for d in months],
+            "month": [d.strftime("%Y-%m") for d in months],
+            "revenue": revenue,
+        })
+
+    @staticmethod
+    def _eps_df(values):
+        return pd.DataFrame({
+            "quarter": [f"Q{i}" for i in range(len(values))],
+            "quarter_label": [f"2025Q{i}" for i in range(len(values))],
+            "eps": [1.0] * len(values),
+            "eps_yoy": values,
+        })
+
+    def test_true_when_all_conditions_met(self):
+        client = FakeClient(
+            fetch_month_revenue=lambda *a, **k: self._rising_revenue_df(),
+            fetch_eps_trend=lambda *a, **k: self._eps_df([10.0, -5.0, 8.0]),
+        )
+        result = compute_buy_score("2330", client=client)
+        assert result["fundamentals_uptrend"] is True
+
+    def test_false_when_one_of_three_recent_months_not_positive(self):
+        client = FakeClient(
+            fetch_month_revenue=lambda *a, **k: self._flat_then_dip_revenue_df(),
+            fetch_eps_trend=lambda *a, **k: self._eps_df([10.0, -5.0, 8.0]),
+        )
+        result = compute_buy_score("2330", client=client)
+        assert result["fundamentals_uptrend"] is False
+
+    def test_false_when_eps_data_insufficient(self):
+        client = FakeClient(
+            fetch_month_revenue=lambda *a, **k: self._rising_revenue_df(),
+            fetch_eps_trend=lambda *a, **k: self._eps_df([10.0]),
+        )
+        result = compute_buy_score("2330", client=client)
+        assert result["fundamentals_uptrend"] is False
+
+    def test_false_when_no_data(self):
+        result = compute_buy_score("2330", client=FakeClient())
+        assert result["fundamentals_uptrend"] is False
+
+
 class TestHelpers:
     def test_sloan_ratio_basic(self):
         # (NI - OCF) / AvgAssets = (100 - 80) / 1000 = 0.02

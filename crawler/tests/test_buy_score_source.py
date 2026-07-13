@@ -26,7 +26,7 @@ from sources.buy_score import (
 from sources.finmind_client import FinMindError
 
 
-def _full_result(score, max_score=24, eligible=20):
+def _full_result(score, max_score=24, eligible=20, fundamentals_uptrend=False):
     """Minimal engine payload with the fields fetch_buy_score reads."""
     return {
         "stock_id": "X",
@@ -34,6 +34,7 @@ def _full_result(score, max_score=24, eligible=20):
         "max_score": max_score,
         "eligible_count": eligible,
         "criteria": [],
+        "fundamentals_uptrend": fundamentals_uptrend,
     }
 
 
@@ -41,7 +42,12 @@ class TestFetchBuyScore:
     def test_returns_score_when_data_available(self):
         with patch("sources.buy_score.compute_buy_score", return_value=_full_result(18)):
             result = fetch_buy_score("2330")
-        assert result == {"score": 18, "max_score": 24}
+        assert result == {"score": 18, "max_score": 24, "fundamentals_uptrend": False}
+
+    def test_returns_fundamentals_uptrend_true_when_engine_flags_it(self):
+        with patch("sources.buy_score.compute_buy_score", return_value=_full_result(18, fundamentals_uptrend=True)):
+            result = fetch_buy_score("2330")
+        assert result == {"score": 18, "max_score": 24, "fundamentals_uptrend": True}
 
     def test_returns_none_when_no_analyzable_data(self):
         # eligible_count == 0 → every fetch failed; must NOT persist a misleading 0/24.
@@ -68,7 +74,7 @@ class TestFetchBuyScore:
         # score 0 but eligible_count > 0 means real data said "fails everything" — keep it.
         with patch("sources.buy_score.compute_buy_score", return_value=_full_result(0, eligible=20)):
             result = fetch_buy_score("2454")
-        assert result == {"score": 0, "max_score": 24}
+        assert result == {"score": 0, "max_score": 24, "fundamentals_uptrend": False}
 
 
 class TestBatchFetchScores:

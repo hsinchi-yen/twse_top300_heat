@@ -187,6 +187,10 @@ Behavior:
   crawler's `.score_progress` file (the dated JSON keeps the full baseline during
   a force refresh, so this counter is the only accurate recompute progress);
   the frontend prefers it and falls back to counting scored stocks on a cold start
+- `fundamentals_uptrend` is a display-only derived flag, NOT part of `score`/
+  `max_score`: `true` only when (a) the 3 most recent monthly revenue YoY values
+  are all `> 0%`, AND (b) at least 2 of the 3 most recent quarterly EPS YoY
+  values are `> 0%`; insufficient data → `false` (no tri-state)
 
 Example:
 
@@ -195,8 +199,8 @@ Example:
   "date": "2026-06-11",
   "generated_at": "2026-06-11T03:42:18+08:00",
   "scores": {
-    "2330": { "score": 18, "max_score": 24 },
-    "2317": { "score": 12, "max_score": 24 }
+    "2330": { "score": 18, "max_score": 24, "fundamentals_uptrend": true },
+    "2317": { "score": 12, "max_score": 24, "fundamentals_uptrend": false }
   },
   "fetching": false
 }
@@ -299,6 +303,10 @@ Updates a single `sector_map` entry.
   backend ignores it for `fetching` past the same age)
 - Frontend buy-score view: progress bar + "評分更新 <date> <time>" in the topbar;
   each card shows 成交量 ｜ 週轉率 ｜ 漲跌幅
+- `fundamentals_uptrend`: derived indicator, computed in `buy_score_engine.py`
+  from the same monthly-revenue and quarterly-EPS series used by the
+  `revenue_yoy` / `eps_yoy` criteria, but with a stricter all-3-months-positive
+  rule for revenue; not scored, shown as a ✅ badge on the card
 
 ## Data retention
 

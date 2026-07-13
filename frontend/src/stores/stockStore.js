@@ -27,7 +27,7 @@ export const useStockStore = defineStore('stock', () => {
   const error = ref(null)
 
   // ── buy score state ──
-  const scores = ref({})          // {stock_id: {score, max_score}}
+  const scores = ref({})          // {stock_id: {score, max_score, fundamentals_uptrend}}
   const scoresLoaded = ref(false)
   const scoresFetching = ref(false)
   const scoreDate = ref('')        // 評分資料日期 (from /api/scores `date`)

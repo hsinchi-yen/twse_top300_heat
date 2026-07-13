@@ -111,7 +111,11 @@ def fetch_buy_score(stock_id: str, token: str | None = None) -> dict | None:
             stock_id, max_score, result.get("eligible_count"),
         )
         return None
-    return {"score": result.get("score"), "max_score": max_score}
+    return {
+        "score": result.get("score"),
+        "max_score": max_score,
+        "fundamentals_uptrend": result.get("fundamentals_uptrend", False),
+    }
 
 
 def batch_fetch_scores(

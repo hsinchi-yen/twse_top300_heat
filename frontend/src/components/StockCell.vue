@@ -30,6 +30,12 @@
       <div v-if="mode === 'buy_score'" class="cell-turnover mono">{{ turnoverLabel }}</div>
       <div class="cell-pct mono" :class="pctClass">{{ formatPct(stock.price_change_pct) }}</div>
     </div>
+
+    <span
+      v-if="showFundamentalsBadge"
+      class="cell-fundamentals-badge"
+      title="近3月營收年增率轉正 + EPS YoY 3季中2季以上正成長"
+    >✅</span>
   </div>
 </template>
 
@@ -96,6 +102,10 @@ const scoreLabel = computed(() => {
   }
   return `${s.score}/${s.max_score ?? 24}`
 })
+
+const showFundamentalsBadge = computed(() =>
+  props.mode === 'buy_score' && props.buyScore?.fundamentals_uptrend === true
+)
 
 const pctClass = computed(() => {
   const p = props.stock.price_change_pct
@@ -297,6 +307,18 @@ function formatPrice(p) {
 .pct-down { color: var(--pct-down); text-shadow: 0 0 7px var(--pct-down-shadow); }
 .pct-flat { color: var(--pct-flat); }
 
+/* ── 營收/EPS 轉強指標：卡片右側置中，介於價格列與漲跌幅列之間 ── */
+.cell-fundamentals-badge {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.85rem;
+  line-height: 1;
+  z-index: 5;
+  pointer-events: none;
+}
+
 .cell-highlighted {
   animation: pulse-highlight 0.6s ease-in-out 3;
   z-index: 20;
@@ -368,6 +390,10 @@ function formatPrice(p) {
 
   .cell-pct {
     font-size: 0.66rem;
+  }
+
+  .cell-fundamentals-badge {
+    font-size: 0.72rem;
   }
 }
 </style>

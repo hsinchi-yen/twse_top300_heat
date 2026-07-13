@@ -136,6 +136,38 @@ describe('StockCell — buy score display', () => {
     })
   })
 
+  describe('fundamentals uptrend badge', () => {
+    it('shows ✅ badge in buy_score mode when fundamentals_uptrend is true', () => {
+      const w = mountCell({
+        mode: 'buy_score', scoresLoaded: true,
+        buyScore: { score: 18, max_score: 24, fundamentals_uptrend: true },
+      })
+      expect(w.find('.cell-fundamentals-badge').exists()).toBe(true)
+      expect(w.find('.cell-fundamentals-badge').text()).toBe('✅')
+    })
+
+    it('hides badge when fundamentals_uptrend is false', () => {
+      const w = mountCell({
+        mode: 'buy_score', scoresLoaded: true,
+        buyScore: { score: 18, max_score: 24, fundamentals_uptrend: false },
+      })
+      expect(w.find('.cell-fundamentals-badge').exists()).toBe(false)
+    })
+
+    it('hides badge when buyScore is null', () => {
+      const w = mountCell({ mode: 'buy_score', scoresLoaded: true, scoresFetching: false, buyScore: null })
+      expect(w.find('.cell-fundamentals-badge').exists()).toBe(false)
+    })
+
+    it('hides badge outside buy_score mode even when fundamentals_uptrend is true', () => {
+      const w = mountCell({
+        mode: 'turnover', scoresLoaded: true,
+        buyScore: { score: 18, max_score: 24, fundamentals_uptrend: true },
+      })
+      expect(w.find('.cell-fundamentals-badge').exists()).toBe(false)
+    })
+  })
+
   describe('existing display elements are unaffected', () => {
     it('still shows rank', () => {
       const w = mountCell()
