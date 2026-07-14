@@ -104,7 +104,7 @@ const scoreLabel = computed(() => {
 })
 
 const showFundamentalsBadge = computed(() =>
-  props.mode === 'buy_score' && props.buyScore?.fundamentals_uptrend === true
+  props.buyScore?.fundamentals_uptrend === true
 )
 
 const pctClass = computed(() => {

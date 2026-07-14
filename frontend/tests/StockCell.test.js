@@ -159,12 +159,16 @@ describe('StockCell — buy score display', () => {
       expect(w.find('.cell-fundamentals-badge').exists()).toBe(false)
     })
 
-    it('hides badge outside buy_score mode even when fundamentals_uptrend is true', () => {
-      const w = mountCell({
+    it('shows badge outside buy_score mode when fundamentals_uptrend is true', () => {
+      expect(mountCell({
         mode: 'turnover', scoresLoaded: true,
         buyScore: { score: 18, max_score: 24, fundamentals_uptrend: true },
-      })
-      expect(w.find('.cell-fundamentals-badge').exists()).toBe(false)
+      }).find('.cell-fundamentals-badge').exists()).toBe(true)
+
+      expect(mountCell({
+        mode: 'volume', scoresLoaded: true,
+        buyScore: { score: 18, max_score: 24, fundamentals_uptrend: true },
+      }).find('.cell-fundamentals-badge').exists()).toBe(true)
     })
   })
 
