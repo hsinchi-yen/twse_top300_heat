@@ -16,13 +16,16 @@
 - ETF mode: 走 `/api/etf?sort_by=turnover|asset_scale&limit=300`
 - Score candidate pool: `volume_rank <= SCORE_CANDIDATE_LIMIT`，預設 `600`，硬上限 `1000`
 - Score engine: `crawler/sources/buy_score_engine.py::compute_buy_score` 原生直連 FinMind，不再依賴外部評分服務
-- Score schedule: 每月 1 日 `03:00`
+- Score schedule: 每天 `03:00` 的 `nightly` job，前一日為交易日才跑（TWSE 官方日資料日期 = 昨天）；先每日籌碼／技術指標，再買進評分；假日不觸發
 - Quota resume: FinMind 額度耗盡時寫 partial，等待 `BUY_SCORE_QUOTA_WAIT_S` 後只續抓未完成者
 - Force refresh: backend 寫 `buy_scores/.force_refresh`；crawler 每分鐘偵測並執行 `score_job(force=True)`
 - Stale-flag recovery: 旗標超過 `SCORING_FLAG_STALE_S`（預設 3h）視為 crash 殘留，backend 不再計入 `fetching`、crawler 自動清除，避免按鈕永久卡死
 - Atomic cache writes: 評分 JSON 一律 `.tmp -> rename`，不得 delete-then-write
 - No misleading zeroes: `eligible_count == 0` 時不落地 `0/24`，前端顯示 `N/A`
 - Polling: 股票盤中 `60s`、盤後 `5min`；ETF 目前盤中 / 盤後都維持 `60s` 輪詢
+- 自選股: backend 擁有 `watchlist` 表與 `/api/watchlist`；評分候選池 = volume pool ∪ watchlist
+- 每日指標: crawler `signals.py` 擁有 `daily_bars` / `inst_flows` / `stock_signals`，backend `/api/signals` 只讀
+- 篩選器 / 卡片 chips: 純前端（`utils/stockFilters.js`、`utils/signals.js`）；缺欄位一律不顯示、不符合篩選
 - Deployment: Yocto production 使用 `run_containers.sh` + `--network host`，共四個容器
 
 ## Test Commands
@@ -31,8 +34,8 @@
 # Backend
 cd backend && pytest -v
 
-# Crawler buy score path
-cd crawler && pytest tests/test_buy_score_source.py tests/test_buy_score_engine.py -v
+# Crawler (buy score, daily signals, nightly gate)
+cd crawler && pytest -v
 
 # Frontend
 cd frontend && npm run test
@@ -61,6 +64,7 @@ cd frontend && npm run test
 | `BUY_SCORE_QUOTA_MAX_CYCLES` | Legacy bound; quota-resume currently loops without an enforced upper limit |
 | `SCORING_FLAG_STALE_S` | Age after which `.scoring_in_progress` / `.force_refresh` are treated as orphaned and cleared (default `10800`) |
 | `BUY_SCORE_GOODINFO_ENABLED` | Optional Goodinfo crawler toggle |
+| `WATCHLIST_MAX` / `SIGNALS_*` | Watchlist size; daily-signal retention, backfill delay, cache TTL (see `SPEC.md`) |
 | `ETF_KEEP_DAYS` | ETF history retention |
 | `ALLOWED_ORIGINS` | Backend CORS allowlist |
 | `TOP100_CACHE_TTL_SECONDS` | Stock API ETag/cache TTL |
@@ -74,6 +78,7 @@ cd frontend && npm run test
   twse_heat.db
   buy_scores/
     YYYY-MM-DD.json
+    details/YYYY-MM-DD.json   # per-stock criteria / risk detail for /api/scores/{id}
     .force_refresh
     .scoring_in_progress
     .score_progress      # {done,total} live recompute counter for the active run
@@ -90,3 +95,17 @@ Deploy pattern:
 3. `scp` images + `run_containers.sh`
 4. remote `docker load`
 5. `bash run_containers.sh`
+
+## Agent skills
+
+### Issue tracker
+
+Issues live on GitHub Issues (`hsinchi-yen/twse_top300_heat`) and are managed via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Uses the default mattpocock/skills label vocabulary (no overrides). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context repo — `CLAUDE.md` (key rules) + `SPEC.md` (full spec) + `improve.md` (long-run stability notes). See `docs/agents/domain.md`.
