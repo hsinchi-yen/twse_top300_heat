@@ -112,3 +112,17 @@ describe('stockStore — mode', () => {
     expect(store.mode).toBe('buy_score')
   })
 })
+
+describe('stockStore — signals', () => {
+  it('setSignals stores payload and skips identical generated_at', () => {
+    const store = useStockStore()
+    store.setSignals({ date: '2026-10-23', generated_at: 't1', signals: { '2330': { inst_streak: 3 } } })
+    const first = store.signals
+    expect(first['2330'].inst_streak).toBe(3)
+    store.setSignals({ date: '2026-10-23', generated_at: 't1', signals: { '2330': { inst_streak: 3 } } })
+    expect(store.signals).toBe(first)
+    store.setSignals({ date: '2026-10-24', generated_at: 't2', signals: {} })
+    expect(store.signals).toEqual({})
+    expect(store.signalsDate).toBe('2026-10-24')
+  })
+})

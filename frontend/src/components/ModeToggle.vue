@@ -29,6 +29,13 @@
     >
       買進評分
     </button>
+    <button
+      id="btn-watchlist"
+      :class="['toggle-btn', 'toggle-btn--score', mode === 'watchlist' ? 'active' : '']"
+      @click="emit('mode-change', 'watchlist')"
+    >
+      ★ 自選 {{ watchCount }}
+    </button>
 
     <!-- 分隔線 -->
     <span class="divider" />
@@ -63,6 +70,7 @@ const props = defineProps({
   mode:          { type: String,  required: true },
   gridSize:      { type: Number,  default: 6 },
   mobileDensity: { type: String,  default: '2x3' },
+  watchCount:    { type: Number,  default: 0 },
 })
 const emit = defineEmits(['mode-change', 'grid-size-change', 'density-change'])
 

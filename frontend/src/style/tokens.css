@@ -5,6 +5,8 @@
 
 :root {
   --font-sans: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Inter", "Noto Sans TC", "Segoe UI", sans-serif;
+  /* Numbers: proportional sans + tabular-nums reads better than monospace in mixed CJK cards */
+  --font-num: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Noto Sans TC", sans-serif;
 
   /* ── Layout ── */
   --app-bg: #050810;
@@ -60,7 +62,7 @@
   --pct-up-shadow: rgba(255,80,80,0.55);
   --pct-down: #00e676;
   --pct-down-shadow: rgba(0,230,120,0.55);
-  --pct-flat: rgba(140,200,230,0.35);
+  --pct-flat: rgba(140,200,230,0.6);
 
   /* ── Scrollbar ── */
   --scrollbar-from: #00e5ff;
@@ -117,15 +119,15 @@
   /* ── Cell chrome ── */
   --cell-rank-color: #00e5ff;
   --cell-rank-shadow: rgba(0,229,255,0.55);
-  --cell-sector-color: rgba(180,220,255,0.45);
+  --cell-sector-color: rgba(180,220,255,0.72);
   --cell-sector-bg: rgba(0,229,255,0.06);
   --cell-sector-border: rgba(0,229,255,0.1);
-  --cell-code-color: rgba(160,210,240,0.45);
-  --cell-price-color: rgba(200,230,255,0.6);
+  --cell-code-color: rgba(160,210,240,0.72);
+  --cell-price-color: rgba(200,230,255,0.88);
   --cell-name-color: #e8f4ff;
   --cell-name-shadow: rgba(200,230,255,0.25);
-  --cell-score-color: rgba(140,200,230,0.55);
-  --cell-value-color: rgba(140,200,230,0.6);
+  --cell-score-color: rgba(160,210,240,0.78);
+  --cell-value-color: rgba(160,210,240,0.8);
   --cell-border-default: rgba(0,229,255,0.1);
   --cell-hover-border: rgba(0,229,255,0.5);
   --cell-hover-sweep: rgba(0,229,255,0.07);
@@ -134,6 +136,35 @@
   --cell-scanline: rgba(0, 0, 0, 0.08);
   --cell-idle-ring: color-mix(in srgb, var(--accent) 8%, transparent);
   --cell-highlight-ring: color-mix(in srgb, var(--accent) 80%, transparent);
+  --cell-bar-track: rgba(255,255,255,0.08);
+
+  /* ── Buy-score signals (avoid red/green: Taiwan red = up, green = down) ── */
+  --sig-badge-bg: rgba(0,0,0,0.25);
+  --sig-strong_buy-bg: #2e2508;
+  --sig-strong_buy-border: rgba(255,200,60,0.55);
+  --sig-strong_buy-fg: #ffd54f;
+  --sig-strong_buy-glow: rgba(255,200,60,0.35);
+  --sig-buy-bg: #062a33;
+  --sig-buy-border: rgba(0,229,255,0.4);
+  --sig-buy-fg: #4dd0e1;
+  --sig-watch-bg: #121b2e;
+  --sig-watch-border: rgba(120,150,210,0.32);
+  --sig-watch-fg: #9fb4dc;
+  --sig-neutral-bg: #0e1218;
+  --sig-neutral-border: rgba(140,150,170,0.16);
+  --sig-neutral-fg: rgba(175,185,200,0.78);
+  --sig-avoid-bg: #1f0e28;
+  --sig-avoid-border: rgba(186,104,200,0.45);
+  --sig-avoid-fg: #ce93d8;
+  --sig-avoid-stripe: rgba(186,104,200,0.08);
+
+  /* ── Indicator chips ── */
+  --chip-bg: rgba(255,255,255,0.07);
+  --chip-fg: rgba(210,225,240,0.85);
+  --chip-good-fg: #ffd54f;
+  --chip-soft-fg: rgba(255,213,79,0.7);
+  --chip-warn-fg: #ffb74d;
+  --chip-warn-bg: rgba(255,152,0,0.14);
 
   /* ── ETF cell chrome ── */
   --etf-cell-rank-color: #ffb300;
@@ -166,14 +197,14 @@
   --ctrl-page-btn-hover-shadow: rgba(0,255,255,0.3);
   --ctrl-dot-bg: rgba(0,255,255,0.05);
   --ctrl-dot-border: rgba(0,255,255,0.2);
-  --ctrl-dot-color: #555;
+  --ctrl-dot-color: rgba(160,200,230,0.6);
   --ctrl-dot-hover-bg: rgba(0,255,255,0.12);
   --ctrl-dot-hover-color: #00e5ff;
   --ctrl-dot-active-bg: rgba(0,229,255,0.15);
   --ctrl-dot-active-border: #00e5ff;
   --ctrl-dot-active-color: #00e5ff;
   --ctrl-dot-active-shadow: rgba(0,229,255,0.4);
-  --ctrl-page-info-color: #444;
+  --ctrl-page-info-color: rgba(160,200,230,0.7);
   --ctrl-jump-bg: #0a1520;
   --ctrl-jump-color: #00e5ff;
   --ctrl-jump-border: rgba(0,229,255,0.3);
@@ -333,7 +364,7 @@ html[data-theme="light"] {
   --pct-up-shadow: rgba(180,72,66,0.16);
   --pct-down: #20714d;
   --pct-down-shadow: rgba(32,113,77,0.15);
-  --pct-flat: rgba(65,72,86,0.42);
+  --pct-flat: rgba(65,72,86,0.6);
 
   /* ── Scrollbar ── */
   --scrollbar-from: #83aef1;
@@ -393,7 +424,7 @@ html[data-theme="light"] {
   --cell-sector-color: rgba(36,88,154,0.74);
   --cell-sector-bg: rgba(36,88,154,0.07);
   --cell-sector-border: rgba(36,88,154,0.14);
-  --cell-code-color: rgba(49,57,70,0.62);
+  --cell-code-color: rgba(49,57,70,0.72);
   --cell-price-color: rgba(16,19,26,0.82);
   --cell-name-color: #151922;
   --cell-name-shadow: rgba(255,255,255,0.45);
@@ -407,6 +438,35 @@ html[data-theme="light"] {
   --cell-scanline: rgba(123, 138, 167, 0.03);
   --cell-idle-ring: rgba(104, 128, 173, 0.10);
   --cell-highlight-ring: rgba(10,102,219,0.22);
+  --cell-bar-track: rgba(30,40,60,0.1);
+
+  /* ── Buy-score signals ── */
+  --sig-badge-bg: rgba(255,255,255,0.7);
+  --sig-strong_buy-bg: rgba(255,244,214,0.95);
+  --sig-strong_buy-border: rgba(196,140,0,0.45);
+  --sig-strong_buy-fg: #8a6200;
+  --sig-strong_buy-glow: rgba(196,140,0,0.18);
+  --sig-buy-bg: rgba(226,247,251,0.95);
+  --sig-buy-border: rgba(0,131,160,0.35);
+  --sig-buy-fg: #00687f;
+  --sig-watch-bg: rgba(236,241,250,0.95);
+  --sig-watch-border: rgba(80,104,150,0.26);
+  --sig-watch-fg: #3d5684;
+  --sig-neutral-bg: rgba(246,247,249,0.92);
+  --sig-neutral-border: rgba(100,110,125,0.16);
+  --sig-neutral-fg: rgba(60,66,78,0.72);
+  --sig-avoid-bg: rgba(246,236,250,0.95);
+  --sig-avoid-border: rgba(142,68,173,0.35);
+  --sig-avoid-fg: #7b3c96;
+  --sig-avoid-stripe: rgba(142,68,173,0.07);
+
+  /* ── Indicator chips ── */
+  --chip-bg: rgba(30,40,60,0.06);
+  --chip-fg: rgba(31,38,52,0.82);
+  --chip-good-fg: #8a6200;
+  --chip-soft-fg: rgba(138,98,0,0.72);
+  --chip-warn-fg: #a65400;
+  --chip-warn-bg: rgba(230,120,0,0.1);
 
   /* ── ETF cell chrome ── */
   --etf-cell-rank-color: #c47a18;

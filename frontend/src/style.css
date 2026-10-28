@@ -29,6 +29,12 @@ body {
   border-radius: 3px;
 }
 
+/* ── Card number class: sans + tabular figures (StockCell) ── */
+.num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Monospace number class (used globally) ── */
 .mono {
   font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;

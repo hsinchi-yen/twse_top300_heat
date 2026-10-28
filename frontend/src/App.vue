@@ -14,7 +14,7 @@
           <span v-if="!marketOpen" class="badge badge-closed">◼ 已收盤</span>
           <span v-else class="badge badge-open">● 盤中</span>
           <span class="last-updated mono">{{ formattedTime }}</span>
-          <ScoreProgress v-if="mode === 'buy_score'" />
+          <ScoreProgress v-if="mode === 'buy_score' || mode === 'watchlist'" />
           <ScoreRefreshBtn />
           <TokenSettings />
           <button
@@ -33,6 +33,7 @@
           :mode="mode"
           :grid-size="gridSize"
           :mobile-density="mobileDensity"
+          :watch-count="watchItems.length"
           @mode-change="onModeChange"
           @grid-size-change="onGridSizeChange"
           @density-change="onDensityChange"
@@ -41,8 +42,9 @@
     </header>
 
     <main class="main-content">
-      <HeatmapGrid v-if="mode !== 'etf'" />
-      <EtfGrid v-else />
+      <EtfGrid v-if="mode === 'etf'" />
+      <WatchlistView v-else-if="mode === 'watchlist'" />
+      <HeatmapGrid v-else />
     </main>
   </div>
 </template>
@@ -52,13 +54,17 @@ import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useStockStore } from './stores/stockStore'
 import { useThemeStore } from './stores/themeStore'
+import { useWatchlistStore } from './stores/watchlistStore'
 import { useStockData } from './composables/useStockData'
+import { useWatchlistData } from './composables/useWatchlistData'
+import { useSignalsData } from './composables/useSignalsData'
 import { useEtfData } from './composables/useEtfData'
 import { fetchScores } from './composables/useScoreData'
 import { useBreakpoint } from './composables/useBreakpoint'
 import ModeToggle from './components/ModeToggle.vue'
 import HeatmapGrid from './components/HeatmapGrid.vue'
 import EtfGrid from './components/EtfGrid.vue'
+import WatchlistView from './components/WatchlistView.vue'
 import TokenSettings from './components/TokenSettings.vue'
 import ScoreRefreshBtn from './components/ScoreRefreshBtn.vue'
 import ScoreProgress from './components/ScoreProgress.vue'
@@ -72,15 +78,19 @@ const {
   marketOpen, updatedAt, date: dataDate, etfDate, etfUpdatedAt,
   scoresLoaded, scoresFetching,
 } = storeToRefs(store)
+const { items: watchItems } = storeToRefs(useWatchlistStore())
 const { isMobile } = useBreakpoint()
 
 useStockData()
 useEtfData()
+useWatchlistData()
+useSignalsData()
 onMounted(fetchScores)
 
 function onModeChange(newMode) {
   store.setMode(newMode)
-  if (newMode === 'buy_score' && !scoresLoaded.value && !scoresFetching.value) {
+  const needsScores = newMode === 'buy_score' || newMode === 'watchlist'
+  if (needsScores && !scoresLoaded.value && !scoresFetching.value) {
     fetchScores()
   }
 }

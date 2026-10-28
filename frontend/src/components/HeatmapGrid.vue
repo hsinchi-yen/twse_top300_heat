@@ -1,11 +1,15 @@
 <template>
   <div class="heatmap-container">
+    <FilterBar :matched="filteredCount" :total="poolCount" />
+
     <div v-if="loading" class="state-msg">
       <span class="loading-dot">▋</span> 載入中…
     </div>
     <div v-else-if="error" class="state-msg error">⚠ {{ error }}</div>
     <div v-else-if="allStocks.length === 0" class="state-msg">
-      {{ mode === 'buy_score' && scoresFetching ? '計分中…' : '暫無資料' }}
+      {{ filters.active.length && poolCount
+        ? '目前沒有股票符合篩選條件'
+        : mode === 'buy_score' && scoresFetching ? '計分中…' : '暫無資料' }}
     </div>
 
     <template v-else>
@@ -27,6 +31,11 @@
           :buy-score="scores[stock.stock_id] ?? null"
           :scores-loaded="scoresLoaded"
           :scores-fetching="scoresFetching"
+          :daily="signals[stock.stock_id] ?? null"
+          :market-open="marketOpen"
+          pinnable
+          :pinned="wl.isPinned(stock.stock_id)"
+          @toggle-pin="wl.toggle"
         />
         <!-- 末頁補空格維持格子排列 -->
         <div
@@ -75,6 +84,10 @@
           {{ isMobile ? '›' : '下一頁 ›' }}
         </button>
 
+        <button v-if="wl.error" class="pin-error" title="點擊關閉" @click="wl.clearError()">
+          ⚠ {{ wl.error }}
+        </button>
+
         <div class="search-box">
           <input
             v-model="searchQuery"
@@ -97,15 +110,21 @@
 import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useStockStore } from '../stores/stockStore'
+import { useWatchlistStore } from '../stores/watchlistStore'
+import { useFilterStore } from '../stores/filterStore'
 import { useBreakpoint } from '../composables/useBreakpoint'
 import { MAX_STOCKS, MOBILE_DENSITY } from '../constants'
+import { applyFilters, sortByPotential } from '../utils/stockFilters'
 import StockCell from './StockCell.vue'
+import FilterBar from './FilterBar.vue'
 
 const store = useStockStore()
 const {
   sectors, loading, error, mode, gridSize, mobileDensity,
-  scores, scoresLoaded, scoresFetching,
+  scores, scoresLoaded, scoresFetching, signals, marketOpen,
 } = storeToRefs(store)
+const wl = useWatchlistStore()
+const filters = useFilterStore()
 const { isMobile } = useBreakpoint()
 
 const page = ref(0)
@@ -140,36 +159,50 @@ const stockLookup = computed(() => {
   return m
 })
 
-const allStocks = computed(() => {
-  if (mode.value === 'buy_score') {
-    const flat = []
-    for (const sector of sectors.value) {
-      for (const s of sector.stocks ?? []) {
-        const sc = scores.value[s.stock_id]
-        flat.push({ ...s, sector: sector.name,
-          score: sc?.score ?? null, max_score: sc?.max_score ?? null })
-      }
-    }
-    flat.sort((a, b) => {
-      if (a.score === null && b.score === null) return 0
-      if (a.score === null) return 1
-      if (b.score === null) return -1
-      return b.score - a.score
-    })
-    return flat.slice(0, MAX_STOCKS).map((s, i) => ({ ...s, rank: i + 1 }))
-  }
-
+// 同一批 600 檔（股票 API query 永遠不變），各模式只在前端重排 / 篩選
+const pool = computed(() => {
   const flat = []
   for (const sector of sectors.value) {
     for (const stock of sector.stocks ?? []) {
       flat.push({ ...stock, sector: sector.name })
     }
   }
-  const sorted = mode.value === 'turnover'
+  return flat
+})
+const poolCount = computed(() => Math.min(pool.value.length, MAX_STOCKS))
+
+function sortForMode(flat) {
+  if (mode.value === 'buy_score') {
+    const withScore = flat.map((s) => {
+      const sc = scores.value[s.stock_id]
+      return { ...s, score: sc?.score ?? null, max_score: sc?.max_score ?? null }
+    })
+    return withScore.sort((a, b) => {
+      if (a.score === null && b.score === null) return 0
+      if (a.score === null) return 1
+      if (b.score === null) return -1
+      return b.score - a.score
+    })
+  }
+  return mode.value === 'turnover'
     ? flat.slice().sort((a, b) => (b.turnover_rate ?? 0) - (a.turnover_rate ?? 0))
     : flat.slice().sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999))
-  return sorted.slice(0, MAX_STOCKS)
+}
+
+const allStocks = computed(() => {
+  let list
+  if (filters.active.length) {
+    // 篩選中：先篩，再依潛力排序（pass_rate → 法人近5日）
+    const data = { scores: scores.value, signals: signals.value, marketOpen: marketOpen.value }
+    list = sortByPotential(applyFilters(pool.value, filters.active, data), data)
+  } else {
+    list = sortForMode(pool.value)
+  }
+  list = list.slice(0, MAX_STOCKS)
+  // 評分模式的 # 是名次；成交量 / 週轉率保留原本的成交量排名
+  return mode.value === 'buy_score' ? list.map((s, i) => ({ ...s, rank: i + 1 })) : list
 })
+const filteredCount = computed(() => allStocks.value.length)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(allStocks.value.length / pageSize.value)))
 const pageStart = computed(() => page.value * pageSize.value)
@@ -337,6 +370,15 @@ function clearSearch() {
   min-height: 44px;
 }
 
+.pin-error {
+  background: none;
+  border: none;
+  color: var(--ctrl-error-color);
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 /* ── 搜尋框 ── */
 .search-box {
   position: relative;
@@ -426,14 +468,15 @@ function clearSearch() {
   .state-msg  { font-size: 0.88rem; padding: 2rem; }
 }
 
-/* ── 平板（769–1024px）：中等字體，介於手機與桌機之間 ── */
+/* ── 平板（769–1024px）：中等字體，介於手機與桌機之間（下限 0.7rem） ── */
 @media (min-width: 769px) and (max-width: 1024px) {
-  .stock-grid :deep(.cell-name)   { font-size: clamp(0.85rem, 1.4vw, 1.1rem); }
-  .stock-grid :deep(.cell-code)   { font-size: clamp(0.58rem, 0.85vw, 0.72rem); }
-  .stock-grid :deep(.cell-price)  { font-size: clamp(0.65rem, 1.0vw, 0.85rem); }
-  .stock-grid :deep(.cell-rank)   { font-size: clamp(0.55rem, 0.8vw, 0.68rem); }
-  .stock-grid :deep(.cell-sector) { font-size: clamp(0.52rem, 0.75vw, 0.65rem); }
-  .stock-grid :deep(.cell-pct)    { font-size: clamp(0.75rem, 1.2vw, 1.0rem); }
+  .stock-grid :deep(.cell-name)     { font-size: clamp(0.9rem, 1.4vw, 1.1rem); }
+  .stock-grid :deep(.cell-code)     { font-size: clamp(0.7rem, 0.85vw, 0.78rem); }
+  .stock-grid :deep(.cell-price)    { font-size: clamp(0.75rem, 1.0vw, 0.9rem); }
+  .stock-grid :deep(.cell-rank)     { font-size: 0.7rem; }
+  .stock-grid :deep(.cell-sector)   { font-size: 0.7rem; }
+  .stock-grid :deep(.cell-pct)      { font-size: clamp(0.8rem, 1.2vw, 1.0rem); }
+  .stock-grid :deep(.cell-passrate) { font-size: clamp(1rem, 1.6vw, 1.2rem); }
 }
 
 /* ── 手機直屏：字體放大（覆蓋 StockCell 的 scoped 字體大小）── */
@@ -449,6 +492,9 @@ function clearSearch() {
   .stock-grid:not([data-density="3x3"]) :deep(.cell-value),
   .stock-grid:not([data-density="3x3"]) :deep(.cell-turnover) { font-size: 1.24rem; }
   .stock-grid:not([data-density="3x3"]) :deep(.cell-pct)    { font-size: 1.56rem; }
+  .stock-grid:not([data-density="3x3"]) :deep(.cell-passrate) { font-size: 1.7rem; }
+  .stock-grid:not([data-density="3x3"]) :deep(.cell-signal),
+  .stock-grid:not([data-density="3x3"]) :deep(.chip)        { font-size: 1rem; }
 }
 
 /* 3x3：密度較高，適度放大即可 */
@@ -462,6 +508,9 @@ function clearSearch() {
   .stock-grid[data-density="3x3"] :deep(.cell-value),
   .stock-grid[data-density="3x3"] :deep(.cell-turnover) { font-size: 0.93rem; }
   .stock-grid[data-density="3x3"] :deep(.cell-pct)    { font-size: 1.17rem; }
+  .stock-grid[data-density="3x3"] :deep(.cell-passrate) { font-size: 1.25rem; }
+  .stock-grid[data-density="3x3"] :deep(.cell-signal),
+  .stock-grid[data-density="3x3"] :deep(.chip)        { font-size: 0.8rem; }
 }
 
 /* 名稱完整顯示：手機改為最多兩行換行 */

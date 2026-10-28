@@ -18,7 +18,7 @@ export const useStockStore = defineStore('stock', () => {
   const tabletDensity = ref(_storedTabletDensity in TABLET_DENSITY ? _storedTabletDensity : DEFAULT_TABLET_DENSITY)
 
   // ── stock mode state ──
-  const mode = ref('turnover')      // 'volume' | 'turnover' | 'etf' | 'buy_score'
+  const mode = ref('turnover')      // 'volume' | 'turnover' | 'etf' | 'buy_score' | 'watchlist'
   const sectors = ref([])
   const date = ref('')
   const marketOpen = ref(true)
@@ -34,6 +34,9 @@ export const useStockStore = defineStore('stock', () => {
   const scoreGeneratedAt = ref('') // 評分完成時間 (from /api/scores `generated_at`)
   const scoresStalled = ref(false) // background fetch appears stuck → allow manual retry
   const scoreProgress = ref(null)  // {done, total} for the active run, or null
+  // ── daily signals (GET /api/signals, nightly 03:00 after trading days) ──
+  const signals = ref({})          // {stock_id: {inst_streak, above_ma20, vol_ratio, ...}}
+  const signalsDate = ref('')
   // ── ETF state ──
   const etfs = ref([])
   const etfDate = ref('')
@@ -132,6 +135,17 @@ export const useStockStore = defineStore('stock', () => {
     scoreProgress.value = val ?? null
   }
 
+  // Skip identical payloads (5-min re-checks): replacing the object would
+  // recompute the filtered grid and reset its page for no reason.
+  let signalsGeneratedAt = null
+  function setSignals(payload) {
+    const generatedAt = payload?.generated_at ?? ''
+    if (generatedAt && generatedAt === signalsGeneratedAt) return
+    signalsGeneratedAt = generatedAt
+    signals.value = payload?.signals ?? {}
+    signalsDate.value = payload?.date ?? ''
+  }
+
   return {
     gridSize, setGridSize,
     mobileDensity, setMobileDensity,
@@ -142,5 +156,6 @@ export const useStockStore = defineStore('stock', () => {
     setEtfData, setEtfLoading, setEtfError, setEtfSortBy,
     scores, scoresLoaded, scoresFetching, scoreDate, scoreGeneratedAt, scoresStalled, scoreProgress,
     setScores, setPartialScores, setScoresFetching, setScoreMeta, setScoresStalled, setScoreProgress,
+    signals, signalsDate, setSignals,
   }
 })
