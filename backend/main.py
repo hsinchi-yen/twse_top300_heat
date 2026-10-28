@@ -8,8 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from sqlalchemy import text as _text
 from database import engine, Base
-from routers import stocks, sectors, etf, scores
+from routers import stocks, sectors, etf, scores, watchlist, signals
 import models.etf  # ensure ETFRank table is registered with Base
+import models.watchlist  # ensure watchlist table is registered with Base
 
 Base.metadata.create_all(bind=engine)
 
@@ -86,6 +87,8 @@ app.include_router(stocks.router, prefix="/api")
 app.include_router(sectors.router, prefix="/api")
 app.include_router(etf.router, prefix="/api")
 app.include_router(scores.router, prefix="/api")
+app.include_router(watchlist.router, prefix="/api")
+app.include_router(signals.router, prefix="/api")
 
 
 @app.get("/health")
