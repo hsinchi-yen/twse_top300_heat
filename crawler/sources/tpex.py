@@ -85,13 +85,25 @@ def _extract_trading_date(raw: list) -> str | None:
     return None
 
 
+def _num(value) -> float | None:
+    try:
+        return float(str(value).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
 def _parse(raw: list[dict]) -> list[dict]:
+    """The live feed reports volume as `TradingShares` and the move as `Change`
+    (no `TradeVolume` / `Yesterday`); older field names are still accepted."""
     result = []
     for row in raw:
         try:
-            volume = int(str(row.get("TradeVolume", "0")).replace(",", "") or "0")
-            yesterday = float(str(row.get("Yesterday", "0")).replace(",", "") or "0")
-            closing = float(str(row.get("Close", "0")).replace(",", "") or "0")
+            volume = int(_num(row.get("TradingShares", row.get("TradeVolume"))) or 0)
+            closing = _num(row.get("Close")) or 0.0
+            yesterday = _num(row.get("Yesterday"))
+            if yesterday is None:
+                change = _num(row.get("Change"))   # "---" when no trade → 0% change
+                yesterday = closing - change if change is not None else 0.0
             pct = ((closing - yesterday) / yesterday * 100) if yesterday else 0.0
             result.append({
                 "stock_id": str(row.get("SecuritiesCompanyCode", "")).strip(),
