@@ -5,6 +5,8 @@ main.py — Crawler APScheduler entry point
     - 盤中：每 60 秒觸發（低 jitter），超過 13:30 自動 skip
     - 收盤後：16:00 執行最終一次（is_closing=True），之後不再拉取
     - 每日 08:55 重置 cache、刷新 sector_map
+    - 每日 03:00 nightly：前一日為交易日才跑 — 每日籌碼／技術指標 → 買進評分
+      （資料不需即時；假日、休市日不觸發）
 """
 
 import json
@@ -12,22 +14,27 @@ import logging
 import os
 import random
 import shutil
+import threading
 import time as _time
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 
+import signals
 from sources.twse import fetch_twse_daily
 from sources.tpex import fetch_tpex_daily
 from sources.yahoo import fetch_yahoo_quotes
 from sources.finmind import fetch_issue_shares, fetch_industry_categories, clear_cache
+from sources.finmind_client import FinMindClient
+from sources.institutional import fetch_market_inst
 from sources.buy_score import (
     batch_fetch_scores, write_scores, load_scores_for_date, load_latest_scores,
-    write_progress, clear_progress, QuotaExhaustedMidBatch, QUOTA_WAIT_S,
+    write_progress, clear_progress, QuotaExhaustedMidBatch, QUOTA_WAIT_S, FINMIND_TOKEN,
 )
 from processor import merge_and_rank
 
@@ -61,6 +68,10 @@ SCORING_FLAG_STALE_S = float(os.getenv("SCORING_FLAG_STALE_S", "10800"))
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 Session = sessionmaker(bind=engine)
+
+# One scoring run at a time across nightly / force-refresh / quota-resume
+# (APScheduler runs different job ids concurrently in its thread pool).
+_SCORE_LOCK = threading.Lock()
 
 
 def _upsert(session, records: list[dict], date: str) -> None:
@@ -300,7 +311,18 @@ def _resume_score_job(pending_ids: list[str], run_date: str) -> None:
     if not pending_ids:
         logger.info("_resume_score_job: no pending stocks, nothing to do")
         return
+    if not _SCORE_LOCK.acquire(blocking=False):
+        # Keep the resume state so the next watch tick retries once the active run ends.
+        logger.info("_resume_score_job: another scoring run is active — retry later")
+        _write_resume_state(pending_ids, run_date)
+        return
+    try:
+        _resume_score_job_locked(pending_ids, run_date)
+    finally:
+        _SCORE_LOCK.release()
 
+
+def _resume_score_job_locked(pending_ids: list[str], run_date: str) -> None:
     logger.info("_resume_score_job: %d stocks remaining for %s", len(pending_ids), run_date)
     existing_scores = load_scores_for_date(run_date)
 
@@ -327,14 +349,55 @@ def _resume_score_job(pending_ids: list[str], run_date: str) -> None:
         _clear_scoring_flags()
 
 
+def _watchlist_ids(session) -> list[str]:
+    """自選股 stock_ids by added_at. The table is owned by the backend; a missing
+    table (backend not started yet / old DB) is treated as an empty watchlist."""
+    try:
+        rows = session.execute(text("SELECT stock_id FROM watchlist ORDER BY added_at ASC")).fetchall()
+    except OperationalError:
+        session.rollback()
+        return []
+    return [r[0] for r in rows]
+
+
+def _score_candidates(session, trade_date: str) -> list[str]:
+    """Candidate pool = volume_rank <= SCORE_CANDIDATE_LIMIT, then watchlist stocks
+    outside the pool (so researched names always get a score)."""
+    rows = session.execute(
+        text("""
+            SELECT stock_id FROM stock_ranks
+            WHERE date = :date
+              AND volume_rank <= :limit
+            ORDER BY volume_rank ASC
+        """),
+        {"date": trade_date, "limit": SCORE_CANDIDATE_LIMIT},
+    ).fetchall()
+    pool = [r[0] for r in rows]
+    in_pool = set(pool)
+    return pool + [sid for sid in _watchlist_ids(session) if sid not in in_pool]
+
+
 def score_job(force: bool = False) -> None:
-    """Compute buy scores for the top-SCORE_CANDIDATE_LIMIT stocks by volume, writing to JSON cache.
+    """Single-flight wrapper: nightly, force-refresh and quota-resume runs never
+    overlap (they would rewrite the same dated JSON). A run that finds another
+    active simply skips — a forced run already recomputes everything."""
+    if not _SCORE_LOCK.acquire(blocking=False):
+        logger.info("score_job: another scoring run is active — skip (force=%s)", force)
+        return
+    try:
+        _score_job(force)
+    finally:
+        _SCORE_LOCK.release()
+
+
+def _score_job(force: bool = False) -> None:
+    """Compute buy scores for the candidate pool (volume pool ∪ watchlist), writing to JSON cache.
 
     Queries the most recent date with actual trading data (not today) so the job
-    works correctly when run at 03:00 on the 1st — trading data for that calendar
-    day does not exist yet.
+    works correctly when run at 03:00 the morning after a trading day — trading
+    data for that calendar day does not exist yet.
 
-    force=False (monthly / resume): pre-loads today's existing JSON and skips
+    force=False (nightly / resume): pre-loads today's existing JSON and skips
     already-scored stocks so an interrupted run resumes from where it left off.
     force=True (manual refresh): re-computes every stock, merging fresh results
     over the existing file so cards keep their previous value until replaced
@@ -356,18 +419,8 @@ def score_job(force: bool = False) -> None:
             logger.warning("score_job: no trading data in DB, skipping")
             return
         trade_date = trade_date_row[0]
+        all_stock_ids = _score_candidates(session, trade_date)
 
-        rows = session.execute(
-            text("""
-                SELECT stock_id FROM stock_ranks
-                WHERE date = :date
-                  AND volume_rank <= :limit
-                ORDER BY volume_rank ASC
-            """),
-            {"date": trade_date, "limit": SCORE_CANDIDATE_LIMIT},
-        ).fetchall()
-
-    all_stock_ids = [r[0] for r in rows]
     if not all_stock_ids:
         logger.warning("score_job: no stocks in DB for trade_date=%s, skipping", trade_date)
         return
@@ -549,6 +602,70 @@ def prune_old_stock_ranks(keep_days: int = 7) -> None:
         logger.info("Pruned %d stock_rank rows older than %s", deleted, cutoff)
 
 
+def _latest_trade_date() -> str | None:
+    """Most recent stock_ranks date with real volume, or None."""
+    with Session() as session:
+        row = session.execute(text("""
+            SELECT date FROM stock_ranks
+            GROUP BY date HAVING SUM(volume) > 0
+            ORDER BY date DESC LIMIT 1
+        """)).fetchone()
+    return row[0] if row else None
+
+
+def signals_job(twse: list[dict], twse_date: str | None, tpex: list[dict], tpex_date: str | None) -> None:
+    """每日籌碼／技術指標 for the candidate universe (see signals.py).
+
+    Uses the official close feeds already fetched by nightly_job. Both markets
+    must report the same trade date, otherwise bars would be half-filled.
+    """
+    if not twse_date or twse_date != tpex_date:
+        logger.warning("signals_job: TWSE %s / TPEx %s disagree or missing — skip", twse_date, tpex_date)
+        return
+    rank_date = _latest_trade_date()
+    with Session() as session:
+        universe = _score_candidates(session, rank_date) if rank_date else []
+        if not universe:
+            logger.warning("signals_job: empty universe — skip")
+            return
+        signals.run_signals(
+            session, universe, twse_date, twse + tpex, fetch_market_inst,
+            client=FinMindClient(api_key=FINMIND_TOKEN or None),
+        )
+
+
+def nightly_job(now: datetime | None = None) -> None:
+    """03:00 nightly: only after a trading day — signals first, then buy scores.
+
+    "Previous calendar day was a trading day" is decided by the official TWSE
+    feed's trade date; if TWSE is unreachable, the latest stock_ranks date is
+    used instead. Holidays / weekends therefore trigger nothing, and no trading
+    calendar has to be maintained. Run sequentially so the two never compete
+    for FinMind quota.
+    """
+    now = now or datetime.now(tz=TZ_TAIPEI)
+    expected = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    twse, twse_date = fetch_twse_daily()
+    _time.sleep(random.uniform(1.0, 3.0))
+    tpex, tpex_date = fetch_tpex_daily()
+
+    traded = twse_date == expected or (twse_date is None and _latest_trade_date() == expected)
+    if not traded:
+        logger.info("nightly_job: %s was not a trading day (TWSE latest %s) — nothing to do", expected, twse_date)
+        return
+
+    logger.info("nightly_job: trading day %s — signals → buy scores", expected)
+    try:
+        signals_job(twse, twse_date, tpex, tpex_date)
+    except Exception as exc:
+        logger.error("nightly signals_job failed (continuing to scores): %s", exc)
+    try:
+        score_job()
+    except Exception as exc:
+        logger.error("nightly score_job failed: %s", exc)
+
+
 def daily_maintenance_job() -> None:
     """Off-peak maintenance: WAL checkpoint, storage check, cache clear, pruning."""
     wal_checkpoint_job()
@@ -559,33 +676,8 @@ def daily_maintenance_job() -> None:
     logger.info("Daily maintenance complete.")
 
 
-if __name__ == "__main__":
-    # Clean up any stale flag left over from a previous process crash.
-    # .scoring_in_progress is only meaningful while THIS process is running;
-    # .score_resume is intentionally persistent and will be picked up by the
-    # watch job after QUOTA_WAIT_S seconds.
-    if SCORING_IN_PROGRESS_FLAG.exists():
-        SCORING_IN_PROGRESS_FLAG.unlink(missing_ok=True)
-        clear_progress()
-        logger.info("Startup: removed stale .scoring_in_progress flag")
-    if SCORE_RESUME_FLAG.exists():
-        state = _read_resume_state()
-        if state:
-            logger.info(
-                "Startup: quota-resume state found (%d stocks for %s) — "
-                "will trigger via watch job after quota wait",
-                len(state.get("pending_ids", [])), state.get("run_date", "?"),
-            )
-
-    # 啟動時立即抓一次最新資料，避免容器重啟後要等到下個 cron trigger 才有資料。
-    # is_closing=True 繞過盤中時間限制，週末 / 盤後均可執行（total_volume=0 保護仍有效）。
-    check_storage()
-    logger.info("Performing startup fetch to load latest available data...")
-    try:
-        crawl_job(is_closing=True)
-    except Exception as exc:
-        logger.error("Startup fetch failed (non-fatal): %s", exc)
-
+def build_scheduler() -> BlockingScheduler:
+    """All cron jobs (not started). Separate from __main__ so job config is testable."""
     scheduler = BlockingScheduler(timezone=TZ_TAIPEI)
 
     # 盤中：09:00-12:59 每分鐘一次
@@ -637,20 +729,21 @@ if __name__ == "__main__":
         id="daily_maintenance",
     )
 
-    # 每月1日 03:00 更新買入評分（財報基礎分數，月更新已足夠）
-    # 凌晨執行：伺服器負載低，限速重試（指數退避，最多 2 小時）於清晨完成
-    # 若1日為假日，misfire_grace_time 24h 確保隔日補跑
+    # 每日 03:00 nightly：前一日為交易日才跑（每日籌碼／技術指標 → 買進評分）
+    # 資料不需即時；每天觸發、由 nightly_job 判斷前一日是否開盤，假日不跑。
+    # misfire_grace_time 3h：容器 03:00 剛好重啟時仍會在清晨補跑。
     scheduler.add_job(
-        score_job,
+        nightly_job,
         trigger="cron",
-        day=1,
         hour=3,
         minute=0,
-        id="score_monthly",
-        misfire_grace_time=86400,
+        id="nightly",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=10800,
     )
 
-    # 每月1日 02:00 VACUUM（評分跑前先整理 DB）
+    # 每月1日 02:00 VACUUM（nightly 跑前先整理 DB）
     scheduler.add_job(
         vacuum_job,
         trigger="cron",
@@ -672,5 +765,36 @@ if __name__ == "__main__":
         misfire_grace_time=30,
     )
 
-    logger.info("Crawler scheduler started. Market hours: 09:00-13:30, poll every 60s.")
+    return scheduler
+
+
+if __name__ == "__main__":
+    # Clean up any stale flag left over from a previous process crash.
+    # .scoring_in_progress is only meaningful while THIS process is running;
+    # .score_resume is intentionally persistent and will be picked up by the
+    # watch job after QUOTA_WAIT_S seconds.
+    if SCORING_IN_PROGRESS_FLAG.exists():
+        SCORING_IN_PROGRESS_FLAG.unlink(missing_ok=True)
+        clear_progress()
+        logger.info("Startup: removed stale .scoring_in_progress flag")
+    if SCORE_RESUME_FLAG.exists():
+        state = _read_resume_state()
+        if state:
+            logger.info(
+                "Startup: quota-resume state found (%d stocks for %s) — "
+                "will trigger via watch job after quota wait",
+                len(state.get("pending_ids", [])), state.get("run_date", "?"),
+            )
+
+    # 啟動時立即抓一次最新資料，避免容器重啟後要等到下個 cron trigger 才有資料。
+    # is_closing=True 繞過盤中時間限制，週末 / 盤後均可執行（total_volume=0 保護仍有效）。
+    check_storage()
+    logger.info("Performing startup fetch to load latest available data...")
+    try:
+        crawl_job(is_closing=True)
+    except Exception as exc:
+        logger.error("Startup fetch failed (non-fatal): %s", exc)
+
+    scheduler = build_scheduler()
+    logger.info("Crawler scheduler started. Market hours: 09:00-13:30, poll every 60s; nightly 03:00.")
     scheduler.start()
