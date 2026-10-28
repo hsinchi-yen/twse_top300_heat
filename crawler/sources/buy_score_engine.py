@@ -978,4 +978,10 @@ def compute_buy_score(
         "risk_criteria": risk_criteria,
         "risk_score": risk_score,
         "fundamentals_uptrend": fundamentals_uptrend,
+        # C9 inputs, exposed so cards can flag 低估 without another PER fetch.
+        "pe": {
+            "current": round(current_per, 2) if current_per is not None else None,
+            "median": round(per_median, 2) if per_median is not None else None,
+            "p25": round(per_p25, 2) if per_p25 is not None else None,
+        },
     }

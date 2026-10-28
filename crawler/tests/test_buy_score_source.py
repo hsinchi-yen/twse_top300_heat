@@ -26,7 +26,7 @@ from sources.buy_score import (
 from sources.finmind_client import FinMindError
 
 
-def _full_result(score, max_score=24, eligible=20, fundamentals_uptrend=False):
+def _full_result(score, max_score=24, eligible=20, fundamentals_uptrend=False, **extra):
     """Minimal engine payload with the fields fetch_buy_score reads."""
     return {
         "stock_id": "X",
@@ -35,19 +35,25 @@ def _full_result(score, max_score=24, eligible=20, fundamentals_uptrend=False):
         "eligible_count": eligible,
         "criteria": [],
         "fundamentals_uptrend": fundamentals_uptrend,
+        **extra,
     }
+
+
+def _core(result):
+    """The three fields every summary has carried since before 2026-10."""
+    return {k: result[k] for k in ("score", "max_score", "fundamentals_uptrend")}
 
 
 class TestFetchBuyScore:
     def test_returns_score_when_data_available(self):
         with patch("sources.buy_score.compute_buy_score", return_value=_full_result(18)):
             result = fetch_buy_score("2330")
-        assert result == {"score": 18, "max_score": 24, "fundamentals_uptrend": False}
+        assert _core(result) == {"score": 18, "max_score": 24, "fundamentals_uptrend": False}
 
     def test_returns_fundamentals_uptrend_true_when_engine_flags_it(self):
         with patch("sources.buy_score.compute_buy_score", return_value=_full_result(18, fundamentals_uptrend=True)):
             result = fetch_buy_score("2330")
-        assert result == {"score": 18, "max_score": 24, "fundamentals_uptrend": True}
+        assert _core(result) == {"score": 18, "max_score": 24, "fundamentals_uptrend": True}
 
     def test_returns_none_when_no_analyzable_data(self):
         # eligible_count == 0 → every fetch failed; must NOT persist a misleading 0/24.
@@ -74,7 +80,54 @@ class TestFetchBuyScore:
         # score 0 but eligible_count > 0 means real data said "fails everything" — keep it.
         with patch("sources.buy_score.compute_buy_score", return_value=_full_result(0, eligible=20)):
             result = fetch_buy_score("2454")
-        assert result == {"score": 0, "max_score": 24, "fundamentals_uptrend": False}
+        assert _core(result) == {"score": 0, "max_score": 24, "fundamentals_uptrend": False}
+
+
+class TestFetchBuyScoreSummary:
+    """Summary fields the cards/filters read, plus a detail payload for details/."""
+
+    RISK = [
+        {"category": "獲利排雷", "name": "自由現金流轉負", "status": "warning",
+         "value_label": "FCF = -1.00", "description": "..."},
+    ]
+    CRITERIA = [
+        {"id": "roe", "label": "ROE (TTM) > 12%", "weight": 2, "pass": True,
+         "value": 28.1, "value_label": "28.1%", "threshold": "> 12%", "warning": None},
+    ]
+
+    def _fetch(self, **extra):
+        payload = _full_result(
+            18, eligible=23, pass_rate=78.3, signal="strong_buy", signal_label="建議買進",
+            risk_score=1, risk_criteria=self.RISK, criteria=self.CRITERIA,
+            pe={"current": 22.1, "median": 24.5, "p25": 19.8},
+        )
+        payload.update(extra)
+        with patch("sources.buy_score.compute_buy_score", return_value=payload):
+            return fetch_buy_score("2330")
+
+    def test_carries_signal_and_pass_rate(self):
+        result = self._fetch()
+        assert result["eligible_count"] == 23
+        assert result["pass_rate"] == 78.3
+        assert result["signal"] == "strong_buy"
+        assert result["signal_label"] == "建議買進"
+
+    def test_risk_flags_are_category_and_name_only(self):
+        result = self._fetch()
+        assert result["risk_score"] == 1
+        assert result["risk_flags"] == [{"category": "獲利排雷", "name": "自由現金流轉負"}]
+
+    def test_carries_pe_triplet(self):
+        assert self._fetch()["pe"] == {"current": 22.1, "median": 24.5, "p25": 19.8}
+
+    def test_missing_pe_becomes_null_triplet(self):
+        result = self._fetch(pe=None)
+        assert result["pe"] == {"current": None, "median": None, "p25": None}
+
+    def test_detail_holds_criteria_and_risk_criteria(self):
+        detail = self._fetch()["detail"]
+        assert detail["criteria"] == self.CRITERIA
+        assert detail["risk_criteria"] == self.RISK
 
 
 class TestBatchFetchScores:
@@ -203,6 +256,88 @@ class TestWriteScores:
         with patch("sources.buy_score.SCORES_DIR", scores_dir):
             path = write_scores({}, "2026-05-19")
         assert path.name == "2026-05-19.json"
+
+
+class TestWriteScoreDetails:
+    """write_scores splits each entry's `detail` into SCORES_DIR/details/<date>.json."""
+
+    DETAIL = {"criteria": [{"id": "roe", "pass": True}], "risk_criteria": []}
+
+    def _read(self, path):
+        # Strict parse: NaN / Infinity are not valid JSON for browsers.
+        def _reject(const):
+            raise ValueError(f"non-standard JSON constant {const}")
+        return json.loads(path.read_text(encoding="utf-8"), parse_constant=_reject)
+
+    def test_summary_never_contains_detail(self, tmp_path):
+        scores_dir = tmp_path / "buy_scores"
+        with patch("sources.buy_score.SCORES_DIR", scores_dir):
+            write_scores({"2330": {"score": 18, "max_score": 24, "detail": self.DETAIL}}, "2026-10-01")
+        summary = self._read(scores_dir / "2026-10-01.json")
+        assert "detail" not in summary["scores"]["2330"]
+
+    def test_detail_file_written_per_stock(self, tmp_path):
+        scores_dir = tmp_path / "buy_scores"
+        with patch("sources.buy_score.SCORES_DIR", scores_dir):
+            write_scores({"2330": {"score": 18, "max_score": 24, "detail": self.DETAIL}}, "2026-10-01")
+        details = self._read(scores_dir / "details" / "2026-10-01.json")
+        assert details["2330"] == self.DETAIL
+
+    def test_baseline_stock_keeps_previous_detail(self, tmp_path):
+        # Partial writes merge new scores over a baseline loaded from the summary
+        # (which has no detail); the baseline stock must keep its earlier detail.
+        scores_dir = tmp_path / "buy_scores"
+        with patch("sources.buy_score.SCORES_DIR", scores_dir):
+            write_scores({"2330": {"score": 18, "max_score": 24, "detail": self.DETAIL}}, "2026-09-01")
+            write_scores({
+                "2330": {"score": 18, "max_score": 24},
+                "2317": {"score": 12, "max_score": 24, "detail": self.DETAIL},
+            }, "2026-10-01")
+        details = self._read(scores_dir / "details" / "2026-10-01.json")
+        assert set(details) == {"2330", "2317"}
+
+    def test_detail_dropped_for_stock_no_longer_in_summary(self, tmp_path):
+        scores_dir = tmp_path / "buy_scores"
+        with patch("sources.buy_score.SCORES_DIR", scores_dir):
+            write_scores({"2330": {"score": 18, "max_score": 24, "detail": self.DETAIL}}, "2026-10-01")
+            write_scores({"2317": {"score": 12, "max_score": 24, "detail": self.DETAIL}}, "2026-10-01")
+        details = self._read(scores_dir / "details" / "2026-10-01.json")
+        assert set(details) == {"2317"}
+
+    def test_non_finite_and_numpy_values_are_json_safe(self, tmp_path):
+        np = pytest.importorskip("numpy")
+        detail = {"criteria": [{"id": "x", "value": float("nan")},
+                               {"id": "y", "value": np.int64(3)},
+                               {"id": "z", "value": float("inf")}],
+                  "risk_criteria": []}
+        scores_dir = tmp_path / "buy_scores"
+        with patch("sources.buy_score.SCORES_DIR", scores_dir):
+            write_scores({"2330": {"score": 1, "max_score": 24, "pass_rate": float("nan"),
+                                   "detail": detail}}, "2026-10-01")
+        summary = self._read(scores_dir / "2026-10-01.json")
+        details = self._read(scores_dir / "details" / "2026-10-01.json")
+        assert summary["scores"]["2330"]["pass_rate"] is None
+        values = [c["value"] for c in details["2330"]["criteria"]]
+        assert values == [None, 3, None]
+
+    def test_details_pruned_beyond_max_keep(self, tmp_path):
+        scores_dir = tmp_path / "buy_scores"
+        details_dir = scores_dir / "details"
+        details_dir.mkdir(parents=True)
+        for i in range(1, 9):
+            (details_dir / f"2026-04-{i:02d}.json").write_text("{}", encoding="utf-8")
+        with patch("sources.buy_score.SCORES_DIR", scores_dir), \
+             patch("sources.buy_score.MAX_KEEP_DAYS", 7):
+            write_scores({"2330": {"score": 1, "max_score": 24, "detail": self.DETAIL}}, "2026-05-19")
+        assert len(list(details_dir.glob("*.json"))) == 7
+
+    def test_load_latest_scores_ignores_details_dir(self, tmp_path):
+        scores_dir = tmp_path / "buy_scores"
+        with patch("sources.buy_score.SCORES_DIR", scores_dir):
+            write_scores({"2330": {"score": 18, "max_score": 24, "detail": self.DETAIL}}, "2026-10-01")
+            latest = load_latest_scores()
+        assert latest["date"] == "2026-10-01"
+        assert "2330" in latest["scores"]
 
 
 class TestProgressFile:

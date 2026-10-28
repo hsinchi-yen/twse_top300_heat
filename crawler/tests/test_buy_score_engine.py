@@ -180,6 +180,22 @@ class TestFundamentalsUptrend:
         assert result["fundamentals_uptrend"] is False
 
 
+class TestPeTriplet:
+    """`pe` exposes the C9 inputs so cards can show 低估 without re-fetching."""
+
+    def test_pe_from_per_history(self):
+        df_per = pd.DataFrame({
+            "date": [f"2025-{m:02d}-01" for m in range(1, 6)],
+            "PER": [10.0, 20.0, 30.0, 40.0, 15.0],
+        })
+        result = compute_buy_score("2330", client=FakeClient(fetch_stock_per=lambda *a, **k: df_per))
+        assert result["pe"] == {"current": 15.0, "median": 20.0, "p25": 15.0}
+
+    def test_pe_null_when_no_data(self):
+        result = compute_buy_score("2330", client=FakeClient())
+        assert result["pe"] == {"current": None, "median": None, "p25": None}
+
+
 class TestHelpers:
     def test_sloan_ratio_basic(self):
         # (NI - OCF) / AvgAssets = (100 - 80) / 1000 = 0.02

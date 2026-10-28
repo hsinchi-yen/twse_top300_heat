@@ -242,3 +242,93 @@ class TestStaleFlagRecovery:
                 resp = client.get("/api/scores?force=true")
         assert resp.status_code == 200
         mock_req.assert_called_once()
+
+
+class TestSummaryFieldsPassthrough:
+    """New summary fields (2026-10) are served as-is; old files simply lack them."""
+
+    RICH = {
+        "date": "2026-10-01",
+        "generated_at": "2026-10-01T03:42:18+08:00",
+        "scores": {
+            "2330": {
+                "score": 18, "max_score": 24, "fundamentals_uptrend": True,
+                "eligible_count": 23, "pass_rate": 78.3,
+                "signal": "strong_buy", "signal_label": "建議買進",
+                "risk_score": 0, "risk_flags": [],
+                "pe": {"current": 22.1, "median": 24.5, "p25": 19.8},
+            },
+        },
+    }
+
+    def test_rich_entry_served_unchanged(self):
+        with patch("routers.scores._load", return_value=self.RICH), \
+             patch("routers.scores._is_fetching", return_value=False):
+            entry = client.get("/api/scores").json()["scores"]["2330"]
+        assert entry == self.RICH["scores"]["2330"]
+
+    def test_legacy_entry_has_no_invented_fields(self):
+        with patch("routers.scores._load", return_value=SAMPLE_PAYLOAD), \
+             patch("routers.scores._is_fetching", return_value=False):
+            entry = client.get("/api/scores").json()["scores"]["2330"]
+        assert "pass_rate" not in entry
+        assert "signal" not in entry
+
+
+class TestScoreDetailEndpoint:
+    """GET /api/scores/{stock_id} reads SCORES_DIR/details/<newest>.json."""
+
+    DETAIL = {
+        "criteria": [{"id": "roe", "label": "ROE (TTM) > 12%", "weight": 2, "pass": True,
+                      "value": 28.1, "value_label": "28.1%", "threshold": "> 12%", "warning": None}],
+        "risk_criteria": [],
+    }
+
+    def _with_details(self, tmpdir, files: dict):
+        from routers import scores as scores_mod
+        details_dir = Path(tmpdir) / "details"
+        details_dir.mkdir()
+        for name, content in files.items():
+            (details_dir / name).write_text(json.dumps(content), encoding="utf-8")
+        scores_mod._detail_cache.clear()
+        return patch.object(scores_mod, "DETAILS_DIR", details_dir)
+
+    def test_returns_detail_for_known_stock(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._with_details(tmpdir, {"2026-10-01.json": {"2330": self.DETAIL}}):
+                resp = client.get("/api/scores/2330")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["date"] == "2026-10-01"
+        assert body["stock_id"] == "2330"
+        assert body["criteria"] == self.DETAIL["criteria"]
+        assert body["risk_criteria"] == []
+
+    def test_uses_newest_detail_file(self):
+        older = {"2330": {"criteria": [], "risk_criteria": []}}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._with_details(tmpdir, {"2026-09-01.json": older, "2026-10-01.json": {"2330": self.DETAIL}}):
+                body = client.get("/api/scores/2330").json()
+        assert body["date"] == "2026-10-01"
+        assert body["criteria"] == self.DETAIL["criteria"]
+
+    def test_unknown_stock_is_404(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._with_details(tmpdir, {"2026-10-01.json": {"2330": self.DETAIL}}):
+                resp = client.get("/api/scores/9999")
+        assert resp.status_code == 404
+
+    def test_no_detail_dir_is_404(self):
+        from routers import scores as scores_mod
+        with tempfile.TemporaryDirectory() as tmpdir:
+            scores_mod._detail_cache.clear()
+            with patch.object(scores_mod, "DETAILS_DIR", Path(tmpdir) / "missing"):
+                resp = client.get("/api/scores/2330")
+        assert resp.status_code == 404
+
+    def test_summary_route_unaffected(self):
+        with patch("routers.scores._load", return_value=SAMPLE_PAYLOAD), \
+             patch("routers.scores._is_fetching", return_value=False):
+            resp = client.get("/api/scores")
+        assert resp.status_code == 200
+        assert "2330" in resp.json()["scores"]

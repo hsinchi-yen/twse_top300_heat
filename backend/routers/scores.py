@@ -10,6 +10,8 @@ Contract:
   - GET /api/scores            → newest scores + {"fetching": <in progress?>}
   - GET /api/scores?force=true → write force-refresh flag for the crawler, then
                                  return current scores + {"fetching": true}
+  - GET /api/scores/{stock_id} → criteria / risk detail from details/<newest>.json
+                                 (404 when absent)
 """
 
 import json
@@ -18,7 +20,7 @@ import os
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 router = APIRouter()
@@ -41,9 +43,13 @@ SCORING_IN_PROGRESS_FLAG = SCORES_DIR / ".scoring_in_progress"
 # keeps the full baseline during a force refresh, so this is the only accurate
 # signal of how far the active run has advanced.
 SCORE_PROGRESS_FLAG = SCORES_DIR / ".score_progress"
+# Per-stock criteria / risk detail, written by the crawler alongside each summary.
+DETAILS_DIR = SCORES_DIR / "details"
 
 # Memory cache keyed by file mtime: {"mtime": float, "payload": dict}
 _cache: dict = {}
+# Detail cache: {"path": str, "mtime": float, "date": str, "payload": dict}
+_detail_cache: dict = {}
 
 
 def _load() -> dict:
@@ -86,6 +92,29 @@ def _load() -> dict:
             logger.warning("Skipping corrupt scores file %s: %s", f, exc)
 
     return {}
+
+
+def _load_details() -> tuple[str, dict]:
+    """Return (date, {stock_id: detail}) from the newest details file, or ("", {}).
+
+    Memory-cached by path + mtime; the file is ~MBs, so it is parsed only when
+    the crawler rewrites it.
+    """
+    global _detail_cache
+
+    if not DETAILS_DIR.exists():
+        return "", {}
+    for f in sorted(DETAILS_DIR.glob("*.json"), reverse=True):
+        try:
+            mtime = f.stat().st_mtime
+            if _detail_cache.get("path") == str(f) and _detail_cache.get("mtime") == mtime:
+                return _detail_cache["date"], _detail_cache["payload"]
+            payload = json.loads(f.read_text(encoding="utf-8"))
+            _detail_cache = {"path": str(f), "mtime": mtime, "date": f.stem, "payload": payload}
+            return f.stem, payload
+        except Exception as exc:
+            logger.warning("Skipping corrupt score detail file %s: %s", f, exc)
+    return "", {}
 
 
 def _flag_active(flag: Path) -> bool:
@@ -162,3 +191,18 @@ def get_scores(request: Request, force: bool = False):
     if progress is not None:
         body["progress"] = progress
     return JSONResponse(content=body)
+
+
+@router.get("/scores/{stock_id}")
+def get_score_detail(stock_id: str):
+    """Return criteria / risk detail for one stock (on demand, not polled)."""
+    date, details = _load_details()
+    entry = details.get(stock_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"no score detail for {stock_id}")
+    return {
+        "date": date,
+        "stock_id": stock_id,
+        "criteria": entry.get("criteria", []),
+        "risk_criteria": entry.get("risk_criteria", []),
+    }

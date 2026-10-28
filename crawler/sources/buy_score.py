@@ -19,6 +19,7 @@ Rate-limit strategy (分時 + 額度耗盡續抓):
 
 import json
 import logging
+import math
 import os
 import time
 from collections.abc import Callable
@@ -89,7 +90,9 @@ def clear_progress() -> None:
 def fetch_buy_score(stock_id: str, token: str | None = None) -> dict | None:
     """Compute buy score for one stock natively.
 
-    Returns {"score": int, "max_score": int} or None on failure.
+    Returns the summary entry (score, max_score, pass_rate, signal, risk_flags,
+    pe, ...) plus a "detail" key holding criteria / risk_criteria, which
+    write_scores splits into details/<date>.json. Returns None on failure.
     Raises FinMindError when FinMind quota is exhausted so the batch caller can
     pause and resume later — non-quota failures degrade to None.
 
@@ -111,10 +114,23 @@ def fetch_buy_score(stock_id: str, token: str | None = None) -> dict | None:
             stock_id, max_score, result.get("eligible_count"),
         )
         return None
+    risk_criteria = result.get("risk_criteria") or []
+    pe = result.get("pe") or {}
     return {
         "score": result.get("score"),
         "max_score": max_score,
         "fundamentals_uptrend": result.get("fundamentals_uptrend", False),
+        "eligible_count": result.get("eligible_count"),
+        "pass_rate": result.get("pass_rate"),
+        "signal": result.get("signal"),
+        "signal_label": result.get("signal_label"),
+        "risk_score": result.get("risk_score", len(risk_criteria)),
+        "risk_flags": [{"category": r.get("category"), "name": r.get("name")} for r in risk_criteria],
+        "pe": {k: pe.get(k) for k in ("current", "median", "p25")},
+        "detail": {
+            "criteria": result.get("criteria") or [],
+            "risk_criteria": risk_criteria,
+        },
     }
 
 
@@ -172,19 +188,87 @@ def batch_fetch_scores(
     return scores
 
 
+def _json_safe(obj):
+    """Recursively coerce engine output to strict JSON.
+
+    numpy scalars → Python numbers; NaN / ±Infinity → None. Browsers' JSON.parse
+    and Starlette's JSONResponse (allow_nan=False) both reject non-finite floats.
+    """
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    if hasattr(obj, "item") and not isinstance(obj, (str, bytes)):
+        try:
+            obj = obj.item()  # numpy scalar → Python scalar
+        except Exception:
+            return None
+    if isinstance(obj, float) and not math.isfinite(obj):
+        return None
+    return obj
+
+
+def _details_dir() -> Path:
+    # Resolved at call time so tests patching SCORES_DIR also redirect details.
+    return SCORES_DIR / "details"
+
+
+def _load_details_baseline(date: str) -> dict:
+    """Details for `date` if present, else the newest details file (or {}).
+
+    Partial writes merge new scores over a summary baseline that has no detail;
+    this baseline lets carried-over stocks keep their previous detail.
+    """
+    d = _details_dir()
+    if not d.exists():
+        return {}
+    dated = d / f"{date}.json"
+    candidates = [dated] if dated.exists() else sorted(d.glob("*.json"), reverse=True)
+    for f in candidates:
+        try:
+            return json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+    return {}
+
+
+def _atomic_write_json(path: Path, payload, indent: int | None = None) -> None:
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=indent, allow_nan=False), encoding="utf-8")
+    tmp.replace(path)
+
+
 def write_scores(scores: dict[str, dict], date: str) -> Path:
-    """Write scores dict to SCORES_DIR/YYYY-MM-DD.json and prune old files."""
+    """Write scores dict to SCORES_DIR/YYYY-MM-DD.json and prune old files.
+
+    Each entry's optional "detail" is split into SCORES_DIR/details/<date>.json
+    (written first, so a reader never sees a summary newer than its detail).
+    """
     SCORES_DIR.mkdir(parents=True, exist_ok=True)
+    summary = {
+        sid: {k: v for k, v in entry.items() if k != "detail"}
+        for sid, entry in scores.items()
+    }
+    new_details = {
+        sid: entry["detail"] for sid, entry in scores.items()
+        if isinstance(entry, dict) and entry.get("detail") is not None
+    }
+    details = {**_load_details_baseline(date), **new_details}
+    details = {sid: d for sid, d in details.items() if sid in summary}
+    if details:
+        details_dir = _details_dir()
+        details_dir.mkdir(parents=True, exist_ok=True)
+        _atomic_write_json(details_dir / f"{date}.json", _json_safe(details))
+        _prune_old(details_dir, MAX_KEEP_DAYS)
+
     payload = {
         "date": date,
         "generated_at": datetime.now(tz=TZ_TAIPEI).isoformat(),
-        "scores": scores,
+        "scores": _json_safe(summary),
     }
     path = SCORES_DIR / f"{date}.json"
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
-    logger.info("Wrote buy scores: %d stocks → %s", len(scores), path)
+    _atomic_write_json(path, payload, indent=2)
+    logger.info("Wrote buy scores: %d stocks (%d with detail) → %s", len(summary), len(details), path)
     _prune_old(SCORES_DIR, MAX_KEEP_DAYS)
     return path
 
