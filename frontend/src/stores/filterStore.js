@@ -28,6 +28,8 @@ function save(active) {
 
 export const useFilterStore = defineStore('filters', () => {
   const active = ref(load())
+  // Set by the overview's sector rows; a one-off drill-down, so it is not persisted.
+  const sector = ref('')
 
   function set(keys) {
     active.value = keys.filter(k => k in CONDITIONS)
@@ -47,5 +49,9 @@ export const useFilterStore = defineStore('filters', () => {
     set([])
   }
 
-  return { active, toggle, applyPreset, clear }
+  function setSector(name) {
+    sector.value = name
+  }
+
+  return { active, sector, toggle, applyPreset, clear, setSector }
 })

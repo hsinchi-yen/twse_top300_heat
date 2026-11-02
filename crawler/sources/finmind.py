@@ -1,7 +1,7 @@
 """
 finmind.py — 發行股數 & 類股資料（週轉率計算用）
 
-Primary source for shares: TWSE OpenAPI t187ap03_L (上市公司基本資料)
+Sources for shares: TWSE OpenAPI t187ap03_L (上市) + TPEx mopsfin_t187ap03_O (上櫃)
 Primary source for industry: FinMind SDK taiwan_stock_info()
 
 Both results are memory-cached and cleared daily by daily_reset_job().
@@ -14,6 +14,8 @@ import random
 import time
 
 import requests
+
+from sources.tpex import fetch_tpex_issue_shares
 
 logger = logging.getLogger(__name__)
 
@@ -31,15 +33,22 @@ _INDUSTRY_CACHE: dict[str, str] = {}
 
 def fetch_issue_shares() -> dict[str, int]:
     """
-    取得所有股票的發行股數。回傳 {stock_id: issue_shares}
+    取得上市 + 上櫃股票的發行股數。回傳 {stock_id: issue_shares}
+
+    只有兩邊都成功才快取：單邊失敗時另一邊照常回傳，下次 crawl 再重試，
+    不讓一次斷線把該市場的週轉率空到每日重置。
     """
     global _SHARES_CACHE
     if _SHARES_CACHE:
         return _SHARES_CACHE
 
-    _SHARES_CACHE = _fetch_shares_from_twse()
-    logger.info("Issue shares loaded: %d stocks", len(_SHARES_CACHE))
-    return _SHARES_CACHE
+    twse = _fetch_shares_from_twse()
+    otc = fetch_tpex_issue_shares()
+    shares = {**otc, **twse}
+    if twse and otc:
+        _SHARES_CACHE = shares
+    logger.info("Issue shares loaded: %d TWSE + %d TPEx", len(twse), len(otc))
+    return shares
 
 
 def fetch_industry_categories() -> dict[str, str]:
@@ -53,7 +62,8 @@ def fetch_industry_categories() -> dict[str, str]:
 
     try:
         from FinMind.data import DataLoader
-        token = os.getenv("FINMIND_TOKEN", "")
+        from sources.token_store import get_token
+        token = get_token()
         dl = DataLoader()
         if token:
             dl.login_by_token(token)

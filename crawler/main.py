@@ -31,10 +31,11 @@ from sources.tpex import fetch_tpex_daily
 from sources.yahoo import fetch_yahoo_quotes
 from sources.finmind import fetch_issue_shares, fetch_industry_categories, clear_cache
 from sources.finmind_client import FinMindClient
+from sources.token_store import get_token
 from sources.institutional import fetch_market_inst
 from sources.buy_score import (
     batch_fetch_scores, write_scores, load_scores_for_date, load_latest_scores,
-    write_progress, clear_progress, QuotaExhaustedMidBatch, QUOTA_WAIT_S, FINMIND_TOKEN,
+    write_progress, clear_progress, QuotaExhaustedMidBatch, QUOTA_WAIT_S,
 )
 from processor import merge_and_rank
 
@@ -613,6 +614,16 @@ def _latest_trade_date() -> str | None:
     return row[0] if row else None
 
 
+def _last_signal_date() -> str | None:
+    """Trade date of the last completed signals run; None before the first."""
+    with Session() as session:
+        try:
+            return session.execute(text("SELECT MAX(date) FROM stock_signals")).scalar()
+        except OperationalError:
+            session.rollback()   # table is created by the first signals run
+            return None
+
+
 def signals_job(twse: list[dict], twse_date: str | None, tpex: list[dict], tpex_date: str | None) -> None:
     """每日籌碼／技術指標 for the candidate universe (see signals.py).
 
@@ -630,32 +641,38 @@ def signals_job(twse: list[dict], twse_date: str | None, tpex: list[dict], tpex_
             return
         signals.run_signals(
             session, universe, twse_date, twse + tpex, fetch_market_inst,
-            client=FinMindClient(api_key=FINMIND_TOKEN or None),
+            client=FinMindClient(api_key=get_token() or None),
         )
 
 
 def nightly_job(now: datetime | None = None) -> None:
-    """03:00 nightly: only after a trading day — signals first, then buy scores.
+    """03:00 nightly: only when a new trading day exists — signals, then buy scores.
 
-    "Previous calendar day was a trading day" is decided by the official TWSE
-    feed's trade date; if TWSE is unreachable, the latest stock_ranks date is
-    used instead. Holidays / weekends therefore trigger nothing, and no trading
-    calendar has to be maintained. Run sequentially so the two never compete
-    for FinMind quota.
+    A new trading day is a TWSE feed date newer than the last one processed. Do
+    not compare it with yesterday: the OpenAPI feed publishes after 03:00 (Saturday
+    03:00 still reports Thursday), so that test can never pass. If TWSE is
+    unreachable, the latest stock_ranks date is used instead. Holidays / weekends
+    produce no new date, so no trading calendar has to be maintained. Run
+    sequentially so the two never compete for FinMind quota.
     """
     now = now or datetime.now(tz=TZ_TAIPEI)
-    expected = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
 
     twse, twse_date = fetch_twse_daily()
     _time.sleep(random.uniform(1.0, 3.0))
     tpex, tpex_date = fetch_tpex_daily()
 
-    traded = twse_date == expected or (twse_date is None and _latest_trade_date() == expected)
-    if not traded:
-        logger.info("nightly_job: %s was not a trading day (TWSE latest %s) — nothing to do", expected, twse_date)
+    processed = _last_signal_date()
+    if twse_date is None:
+        trade_date = yesterday if _latest_trade_date() == yesterday else None
+    else:
+        trade_date = twse_date if processed is None or twse_date > processed else None
+    if trade_date is None:
+        logger.info("nightly_job: no new trading day (TWSE latest %s, processed %s) — nothing to do",
+                    twse_date, processed)
         return
 
-    logger.info("nightly_job: trading day %s — signals → buy scores", expected)
+    logger.info("nightly_job: trading day %s (processed %s) — signals → buy scores", trade_date, processed)
     try:
         signals_job(twse, twse_date, tpex, tpex_date)
     except Exception as exc:

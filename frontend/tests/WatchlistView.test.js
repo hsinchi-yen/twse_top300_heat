@@ -85,6 +85,130 @@ describe('WatchlistView', () => {
   })
 })
 
+describe('WatchlistView — compare', () => {
+  const items = [
+    { stock_id: 'A', note: '', added_at: '1', quote: quote('A', '甲') },
+    { stock_id: 'B', note: '', added_at: '2', quote: quote('B', '乙') },
+    { stock_id: 'C', note: '', added_at: '3', quote: quote('C', '丙') },
+    { stock_id: 'D', note: '', added_at: '4', quote: quote('D', '丁') },
+  ]
+  const bars = [
+    { date: '2026-01-01', close: 100 }, { date: '2026-01-02', close: 110 },
+  ]
+
+  beforeEach(() => {
+    fetchMock.mockImplementation(() => jsonResponse({ bars }))
+  })
+
+  const compareButtons = (w) => w.findAll('.watch-compare')
+
+  it('shows nothing until a stock is selected', () => {
+    seed(items)
+    expect(mount(WatchlistView).find('.compare').exists()).toBe(false)
+  })
+
+  it('asks for a second stock, then charts both on one axis', async () => {
+    seed(items)
+    const w = mount(WatchlistView)
+    await compareButtons(w)[0].trigger('click')
+    await flushPromises()
+    expect(w.find('.compare-msg').text()).toContain('再選一檔')
+    await compareButtons(w)[1].trigger('click')
+    await flushPromises()
+    expect(w.findAll('.compare path.line')).toHaveLength(2)
+    expect(fetchMock.mock.calls.map(c => c[0])).toContain('/api/stocks/A/history?days=132')
+  })
+
+  it('reports each stock\'s return over the shared window', async () => {
+    seed(items)
+    const w = mount(WatchlistView)
+    await compareButtons(w)[0].trigger('click')
+    await compareButtons(w)[1].trigger('click')
+    await flushPromises()
+    expect(w.find('[data-row="return"]').text()).toContain('+10.0%')
+  })
+
+  it('carries the same disclaimer as every other analysis surface', async () => {
+    seed(items)
+    const w = mount(WatchlistView)
+    await compareButtons(w)[0].trigger('click')
+    await compareButtons(w)[1].trigger('click')
+    await flushPromises()
+    expect(w.find('.compare .research-note').text()).toContain('非投資建議')
+    expect(w.find('.compare').text()).toContain('未還原除權息')
+  })
+
+  it('caps the selection at three', async () => {
+    seed(items)
+    const w = mount(WatchlistView)
+    for (const i of [0, 1, 2]) await compareButtons(w)[i].trigger('click')
+    await flushPromises()
+    expect(compareButtons(w)[3].attributes('disabled')).toBeDefined()
+    expect(compareButtons(w)[0].attributes('disabled')).toBeUndefined()
+  })
+
+  it('a stock keeps its colour when another is removed', async () => {
+    seed(items)
+    const w = mount(WatchlistView)
+    for (const i of [0, 1]) await compareButtons(w)[i].trigger('click')
+    await flushPromises()
+    const stroke = () => w.findAll('.compare path.line').map(p => p.attributes('stroke'))
+    expect(stroke()).toEqual(['var(--series-1)', 'var(--series-2)'])
+    await compareButtons(w)[0].trigger('click')
+    await compareButtons(w)[2].trigger('click')
+    await flushPromises()
+    expect(stroke()).toEqual(['var(--series-2)', 'var(--series-1)'])
+  })
+
+  it('a stock without a quote cannot be selected', () => {
+    seed([{ stock_id: 'Z', note: '', added_at: 'x', quote: null }])
+    expect(compareButtons(mount(WatchlistView))[0].attributes('disabled')).toBeDefined()
+  })
+
+  it('reports failure instead of an empty chart', async () => {
+    fetchMock.mockImplementation(() => jsonResponse({}, 500))
+    seed(items)
+    const w = mount(WatchlistView)
+    await compareButtons(w)[0].trigger('click')
+    await flushPromises()
+    expect(w.find('.compare-msg').text()).toContain('無法取得')
+  })
+
+  it('does not refetch a stock it already has', async () => {
+    seed(items)
+    const w = mount(WatchlistView)
+    await compareButtons(w)[0].trigger('click')
+    await compareButtons(w)[1].trigger('click')
+    await flushPromises()
+    const before = fetchMock.mock.calls.length
+    await compareButtons(w)[1].trigger('click')
+    await compareButtons(w)[1].trigger('click')
+    await flushPromises()
+    expect(fetchMock.mock.calls.length).toBe(before)
+  })
+
+  it('deselecting during a fetch does not leave it loading forever', async () => {
+    seed(items)
+    const w = mount(WatchlistView)
+    await compareButtons(w)[0].trigger('click')
+    await flushPromises()
+
+    let release
+    fetchMock.mockImplementationOnce(() => new Promise((resolve) => {
+      release = () => resolve({ ok: true, status: 200, json: () => Promise.resolve({ bars }) })
+    }))
+    await compareButtons(w)[1].trigger('click')
+    await flushPromises()
+    expect(w.find('.compare-msg').text()).toContain('載入')
+
+    await compareButtons(w)[1].trigger('click')
+    await flushPromises()
+    release()
+    await flushPromises()
+    expect(w.find('.compare-msg').text()).toContain('再選一檔')
+  })
+})
+
 describe('ScoreDetail', () => {
   it('lists passed / failed / missing criteria and risk items', async () => {
     fetchMock.mockReturnValueOnce(jsonResponse({

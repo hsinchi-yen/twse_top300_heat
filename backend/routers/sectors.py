@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models.stock import SectorMap
+from routers import market
 
 router = APIRouter()
 
@@ -26,4 +27,5 @@ def update_sector(stock_id: str, body: SectorUpdate, db: Session = Depends(get_d
         raise HTTPException(status_code=404, detail="stock_id not found in sector_map")
     row.sector = body.sector
     db.commit()
+    market.clear_cache()   # sector rotation is memoized until the bars change
     return {"stock_id": stock_id, "sector": row.sector}

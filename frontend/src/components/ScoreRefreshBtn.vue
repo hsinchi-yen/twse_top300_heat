@@ -1,9 +1,10 @@
 <template>
   <button
-    class="score-refresh-btn"
+    class="icon-btn score-refresh-btn"
     :class="{ spinning: scoresFetching && !scoresStalled }"
     :disabled="scoresFetching && !scoresStalled"
     :title="btnTitle"
+    :aria-label="btnTitle"
     @click="onClick"
   >
     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -25,7 +26,7 @@ const { scoresFetching, scoresStalled } = storeToRefs(store)
 const btnTitle = computed(() => {
   if (scoresStalled.value) return '評分似乎停滯，點擊重試'
   if (scoresFetching.value) return '評分更新中…'
-  return '重新抓取買入評分'
+  return '重新計算買進評分（約 90 分鐘）'
 })
 
 // Allow a click when idle, or when a background fetch appears stalled (the
@@ -38,36 +39,9 @@ function onClick() {
 </script>
 
 <style scoped>
-.score-refresh-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  background: var(--toggle-btn-muted-bg);
-  border: 1px solid var(--border-default);
-  border-radius: 5px;
-  color: var(--toggle-btn-muted-color);
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-  flex-shrink: 0;
-}
-
-.score-refresh-btn:hover:not(:disabled) {
-  background: var(--toggle-btn-hover-bg);
-  border-color: var(--border-strong);
-  color: var(--accent);
-}
-
-.score-refresh-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 .icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .spinning .icon {
@@ -77,16 +51,5 @@ function onClick() {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
-}
-
-@media (max-width: 1366px), (max-height: 768px) {
-  .score-refresh-btn {
-    width: 24px;
-    height: 24px;
-  }
-  .icon {
-    width: 12px;
-    height: 12px;
-  }
 }
 </style>

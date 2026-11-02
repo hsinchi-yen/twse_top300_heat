@@ -1,11 +1,14 @@
 <template>
   <div
     class="stock-cell"
-    :class="{ 'cell-highlighted': highlighted }"
     :data-tier="stock.color_tier"
     :data-signal="tintSignal ?? undefined"
     :style="cellStyle"
     :title="tooltip"
+    :role="clickable ? 'button' : undefined"
+    :tabindex="clickable ? 0 : undefined"
+    @click="onClick"
+    @keydown="onKey"
     @pointerdown="onPressStart"
     @pointermove="onPressMove"
     @contextmenu="pinnable && $event.preventDefault()"
@@ -45,13 +48,20 @@
       </template>
       <span v-else-if="!scoreView" class="cell-value num">{{ valueLabel }}</span>
       <span v-if="scoreLabel !== null" class="cell-score num">{{ scoreLabel }}</span>
+      <span
+        v-if="showFundamentalsBadge"
+        class="cell-fundamentals-badge"
+        role="img"
+        aria-label="營收與 EPS 轉強"
+        title="近3月營收年增率轉正 + EPS YoY 3季中2季以上正成長"
+      >✅</span>
     </div>
 
     <!-- 價格 +（評分模式）週轉率 + 漲跌幅 -->
     <div class="cell-bottom">
-      <span class="cell-price num">{{ formatPrice(stock.close_price) }}</span>
+      <span class="cell-price num">{{ priceLabel }}</span>
       <span v-if="scoreView" class="cell-turnover num">{{ turnoverLabel }}</span>
-      <span class="cell-pct num" :class="pctClass">{{ formatPct(stock.price_change_pct) }}</span>
+      <span class="cell-pct num" :class="pctClass(stock.price_change_pct)">{{ formatPct(stock.price_change_pct) }}</span>
     </div>
 
     <!-- 指標 chips：排雷 / 轉強 / 低估（買進評分）+ 法人 / 均線 / 量比 / 近高（每日盤後） -->
@@ -61,7 +71,7 @@
         :key="c.key"
         :data-chip="c.key"
         class="chip"
-        :class="[`chip--${c.tone}`, { 'chip--keep': c.keepText, 'cell-fundamentals-badge': c.key === 'uptrend' }]"
+        :class="[`chip--${c.tone}`, { 'chip--keep': c.keepText }]"
         :title="c.title"
       ><span class="chip-icon">{{ c.icon }}</span><span class="chip-text">{{ c.text }}</span></span>
     </div>
@@ -70,41 +80,50 @@
 
 <script setup>
 import { computed, onBeforeUnmount } from 'vue'
-import { tierToColor, tierToGlow } from '../utils/colorTier'
+import { tierToColor, tierToBorder } from '../utils/colorTier'
 import { resolveSignal, signalLabel, passRate, scoreChips, dailyChips } from '../utils/signals'
+import { formatPct, formatPrice, formatTurnover, pctClass } from '../utils/format'
 
 const props = defineProps({
-  stock:        { type: Object,  required: true },
-  mode:         { type: String,  default: 'turnover' },
-  highlighted:  { type: Boolean, default: false },
+  stock:          { type: Object,  required: true },
+  mode:           { type: String,  default: 'turnover' },
   buyScore:       { type: Object,  default: null },
   scoresLoaded:   { type: Boolean, default: false },
   scoresFetching: { type: Boolean, default: false },
   pinnable:       { type: Boolean, default: false },
   pinned:         { type: Boolean, default: false },
+  clickable:      { type: Boolean, default: false },
   daily:          { type: Object,  default: null },   // GET /api/signals entry
   marketOpen:     { type: Boolean, default: false },
 })
-const emit = defineEmits(['toggle-pin'])
+const emit = defineEmits(['toggle-pin', 'open'])
 
 // 手機長按 = 切換自選（桌機用右上角 ☆）
 const LONG_PRESS_MS = 550
-const PRESS_SLOP_PX = 10   // 超過即視為滑動換頁，不觸發長按
+const PRESS_SLOP_PX = 10   // 超過即視為滑動換頁，不觸發長按也不開面板
 let pressTimer = null
 let pressX = 0
 let pressY = 0
+let consumed = false       // this press already did something; swallow its click
+
 function onPressStart(e) {
-  if (!props.pinnable || e.pointerType === 'mouse') return
   cancelPress()
+  consumed = false
   pressX = e.clientX
   pressY = e.clientY
+  if (!props.pinnable || e.pointerType === 'mouse') return
   pressTimer = setTimeout(() => {
     pressTimer = null
+    consumed = true
     emit('toggle-pin', props.stock.stock_id)
   }, LONG_PRESS_MS)
 }
 function onPressMove(e) {
-  if (pressTimer && Math.hypot(e.clientX - pressX, e.clientY - pressY) > PRESS_SLOP_PX) cancelPress()
+  if (e.buttons === 0 && e.pointerType === 'mouse') return
+  if (Math.hypot(e.clientX - pressX, e.clientY - pressY) > PRESS_SLOP_PX) {
+    consumed = true
+    cancelPress()
+  }
 }
 function cancelPress() {
   if (pressTimer) {
@@ -114,46 +133,59 @@ function cancelPress() {
 }
 onBeforeUnmount(cancelPress)
 
+function onClick() {
+  if (consumed) {
+    consumed = false
+    return
+  }
+  if (props.clickable) emit('open', props.stock.stock_id)
+}
+
+function onKey(e) {
+  if (!props.clickable || e.target !== e.currentTarget) return
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    emit('open', props.stock.stock_id)
+  }
+}
+
 const signal = computed(() => (props.scoresLoaded ? resolveSignal(props.buyScore) : null))
 const sigLabel = computed(() => (signal.value ? signalLabel(props.buyScore) : null))
 const rate = computed(() => (props.scoresLoaded ? passRate(props.buyScore) : null))
 // chips 列放不下時尾端會被裁掉 → 依重要性排序（排雷最先）
 const CHIP_ORDER = ['risk', 'uptrend', 'value', 'inst', 'ma', 'vol', 'high']
+// 營收/EPS 轉強改以 ✅ 徽章呈現，不再重複出現在 chips
+const showFundamentalsBadge = computed(() =>
+  props.scoresLoaded && props.buyScore?.fundamentals_uptrend === true
+)
 const chips = computed(() => [
-  ...(props.scoresLoaded ? scoreChips(props.buyScore) : []),
+  ...(props.scoresLoaded ? scoreChips(props.buyScore).filter(c => c.key !== 'uptrend') : []),
   ...dailyChips(props.daily, props.stock, props.marketOpen),
 ].sort((a, b) => CHIP_ORDER.indexOf(a.key) - CHIP_ORDER.indexOf(b.key)))
 
 // 評分 / 自選視角：依訊號上色 + 通過率主指標；成交量 / 週轉率維持漲跌熱度
 const scoreView = computed(() => props.mode === 'buy_score' || props.mode === 'watchlist')
-const tintBySignal = scoreView
-const tintSignal = computed(() => (tintBySignal.value ? signal.value : null))
+const tintSignal = computed(() => (scoreView.value ? signal.value : null))
 
 const cellStyle = computed(() => {
-  const ring = props.highlighted
-    ? '0 0 28px 8px var(--cell-highlight-ring)'
-    : '0 0 1px var(--cell-idle-ring)'
-  const style = {}
-
-  if (tintBySignal.value) {
+  if (scoreView.value) {
     const s = tintSignal.value
-    style.backgroundColor = s ? `var(--sig-${s}-bg)` : tierToColor('neutral')
-    if (s) style.borderColor = `var(--sig-${s}-border)`
-    style.boxShadow = ring
-  } else {
-    const tier = props.stock.color_tier
-    style.backgroundColor = tierToColor(tier)
-    style.boxShadow = `inset 0 0 16px ${tierToGlow(tier)}, ${ring}`
+    return {
+      backgroundColor: s ? `var(--sig-${s}-bg)` : tierToColor('neutral'),
+      borderColor: s ? `var(--sig-${s}-border)` : tierToBorder('neutral'),
+    }
   }
-  if (props.highlighted) style.borderColor = 'var(--accent)'
-  return style
+  const tier = props.stock.color_tier
+  return { backgroundColor: tierToColor(tier), borderColor: tierToBorder(tier) }
+})
+
+const priceLabel = computed(() => {
+  const p = props.stock.close_price
+  return p == null || p === 0 ? '' : formatPrice(p)
 })
 
 const valueLabel = computed(() => {
-  if (props.mode === 'turnover') {
-    const r = props.stock.turnover_rate
-    return r != null ? `${r.toFixed(2)}%` : '—'
-  }
+  if (props.mode === 'turnover') return formatTurnover(props.stock.turnover_rate)
   const v = props.stock.volume
   if (v == null) return '—'
   const zhang = Math.round(v / 1000)
@@ -165,10 +197,7 @@ const valueLabel = computed(() => {
 })
 
 // 週轉率（買進評分模式下，顯示於價格與漲跌幅之間）
-const turnoverLabel = computed(() => {
-  const r = props.stock.turnover_rate
-  return r != null ? `${r.toFixed(2)}%` : '—'
-})
+const turnoverLabel = computed(() => formatTurnover(props.stock.turnover_rate))
 
 // null    → never requested scores (show nothing)
 // '...'   → fetch in progress, this stock not yet scored
@@ -194,73 +223,35 @@ const tooltip = computed(() => {
   for (const c of chips.value) parts.push(c.title)
   return parts.filter(Boolean).join('｜')
 })
-
-const pctClass = computed(() => {
-  const p = props.stock.price_change_pct
-  if (p == null) return ''
-  if (p > 0)  return 'pct-up'
-  if (p < 0)  return 'pct-down'
-  return 'pct-flat'
-})
-
-function formatPct(pct) {
-  if (pct == null) return '—'
-  const sign = pct > 0 ? '+' : ''
-  return `${sign}${pct.toFixed(2)}%`
-}
-
-function formatPrice(p) {
-  if (p == null || p === 0) return ''
-  return p >= 100 ? p.toFixed(1) : p.toFixed(2)
-}
 </script>
 
 <style scoped>
-/* 字級下限 0.7rem（≈11px）：放不下的元素改為隱藏，不再縮字 */
+/* 字級下限 0.7rem：放不下的元素改為隱藏，不再縮字 */
 .stock-cell {
-  container-type: inline-size;
+  container-type: size;
   width: 100%;
   height: 100%;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 2px;
-  padding: 6px 8px 6px 10px;
-  box-sizing: border-box;
-  cursor: default;
+  padding: 8px 10px;
   position: relative;
   overflow: hidden;
-  border: 1px solid var(--cell-border-default);
-  transition: filter 0.12s, transform 0.12s, border-color 0.12s;
+  border: 1px solid transparent;
+  transition: border-color 0.12s, box-shadow 0.12s;
   -webkit-touch-callout: none;
   user-select: none;
 }
+.stock-cell[role="button"] { cursor: pointer; }
 
-/* Top-left highlight sweep on hover */
-.stock-cell::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 6px;
-  background: linear-gradient(135deg, var(--cell-hover-sweep) 0%, transparent 55%);
-  opacity: 0;
-  transition: opacity 0.15s;
-  pointer-events: none;
+@media (hover: hover) {
+  .stock-cell[role="button"]:hover {
+    border-color: var(--border-strong) !important;
+    box-shadow: var(--shadow-sm);
+  }
 }
-.stock-cell:hover {
-  filter: brightness(1.12);
-  transform: scale(1.02);
-  z-index: 10;
-  border-color: var(--cell-hover-border);
-}
-.stock-cell:hover::before { opacity: 1; }
-
-/* ── tier accent borders（漲跌熱度視角） ── */
-.stock-cell[data-tier="deep_red"]:not([data-signal])    { border-color: var(--tier-dr-border); }
-.stock-cell[data-tier="light_red"]:not([data-signal])   { border-color: var(--tier-lr-border); }
-.stock-cell[data-tier="light_green"]:not([data-signal]) { border-color: var(--tier-lg-border); }
-.stock-cell[data-tier="deep_green"]:not([data-signal])  { border-color: var(--tier-dg-border); }
 
 /* 高風險避開：斜紋提示 */
 .stock-cell[data-signal="avoid"] {
@@ -273,25 +264,21 @@ function formatPrice(p) {
 .cell-top {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex-shrink: 0;
   min-width: 0;
 }
 
 .cell-rank {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--cell-rank-color);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
 .cell-sector {
-  font-size: 0.7rem;
-  color: var(--cell-sector-color);
-  background: var(--cell-sector-bg);
-  border: 1px solid var(--cell-sector-border);
-  padding: 0 4px;
-  border-radius: 3px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -302,23 +289,15 @@ function formatPrice(p) {
 .cell-signal {
   margin-left: auto;
   font-size: 0.72rem;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 999px;
+  font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
   color: var(--sig-neutral-fg);
-  border: 1px solid var(--sig-neutral-border);
-  background: var(--sig-badge-bg);
 }
-.cell-signal[data-signal="strong_buy"] {
-  color: var(--sig-strong_buy-fg);
-  border-color: var(--sig-strong_buy-border);
-  box-shadow: 0 0 8px var(--sig-strong_buy-glow);
-}
-.cell-signal[data-signal="buy"]   { color: var(--sig-buy-fg);   border-color: var(--sig-buy-border); }
-.cell-signal[data-signal="watch"] { color: var(--sig-watch-fg); border-color: var(--sig-watch-border); }
-.cell-signal[data-signal="avoid"] { color: var(--sig-avoid-fg); border-color: var(--sig-avoid-border); }
+.cell-signal[data-signal="strong_buy"] { color: var(--sig-strong_buy-fg); }
+.cell-signal[data-signal="buy"]   { color: var(--sig-buy-fg); }
+.cell-signal[data-signal="watch"] { color: var(--sig-watch-fg); }
+.cell-signal[data-signal="avoid"] { color: var(--sig-avoid-fg); }
 
 /* 自選 ☆：未釘選時只在 hover 出現；已釘選常駐 ★ */
 .cell-pin {
@@ -329,8 +308,7 @@ function formatPrice(p) {
   padding: 0 2px;
   font-size: 0.95rem;
   line-height: 1;
-  cursor: pointer;
-  color: var(--cell-score-color);
+  color: var(--text-muted);
   opacity: 0;
   transition: opacity 0.12s;
 }
@@ -340,6 +318,7 @@ function formatPrice(p) {
   color: var(--sig-strong_buy-fg);
 }
 .stock-cell:hover .cell-pin,
+.stock-cell:focus-visible .cell-pin,
 .cell-pin:focus-visible { opacity: 1; }
 @media (hover: none) {
   .cell-pin:not(.is-pinned) { display: none; }
@@ -351,7 +330,7 @@ function formatPrice(p) {
   left: 0;
   top: 0;
   bottom: 0;
-  width: 4px;
+  width: 3px;
   background: var(--sig-neutral-fg);
 }
 .cell-signal-bar[data-signal="strong_buy"] { background: var(--sig-strong_buy-fg); }
@@ -364,13 +343,13 @@ function formatPrice(p) {
   display: flex;
   align-items: baseline;
   gap: 6px;
+  flex-shrink: 0;
   min-width: 0;
-  min-height: 0;
   overflow: hidden;
-  font-size: clamp(0.95rem, 1.4vw, 1.15rem);
-  font-weight: 700;
-  line-height: 1.2;
-  color: var(--cell-name-color);
+  font-size: clamp(0.95rem, 1.3vw, 1.1rem);
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text-primary);
 }
 
 .cell-name-text {
@@ -382,9 +361,9 @@ function formatPrice(p) {
 }
 
 .cell-code {
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: var(--cell-code-color);
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -396,14 +375,20 @@ function formatPrice(p) {
   min-width: 0;
   flex-shrink: 0;
 }
+.cell-fundamentals-badge {
+  margin-left: auto;
+  font-size: 0.85rem;
+  line-height: 1;
+  flex-shrink: 0;
+  pointer-events: none;
+}
 
 .cell-passrate {
-  font-size: 1.15rem;
-  font-weight: 800;
+  font-size: 1.1rem;
+  font-weight: 700;
   line-height: 1;
-  color: var(--cell-name-color);
+  color: var(--sig-neutral-fg);
 }
-.stock-cell[data-signal] .cell-passrate { color: var(--sig-neutral-fg); }
 .stock-cell[data-signal="strong_buy"] .cell-passrate { color: var(--sig-strong_buy-fg); }
 .stock-cell[data-signal="buy"] .cell-passrate        { color: var(--sig-buy-fg); }
 .stock-cell[data-signal="watch"] .cell-passrate      { color: var(--sig-watch-fg); }
@@ -411,34 +396,33 @@ function formatPrice(p) {
 
 .cell-passbar {
   flex: 1;
-  height: 5px;
+  height: 4px;
   min-width: 24px;
-  border-radius: 3px;
-  background: var(--cell-bar-track);
+  border-radius: 2px;
+  background: var(--chip-bg);
   overflow: hidden;
 }
 .cell-passbar-fill {
   display: block;
   height: 100%;
-  border-radius: 3px;
-  background: currentColor;
-  color: var(--sig-neutral-fg);
+  border-radius: 2px;
+  background: var(--sig-neutral-fg);
 }
-.stock-cell[data-signal="strong_buy"] .cell-passbar-fill { color: var(--sig-strong_buy-fg); }
-.stock-cell[data-signal="buy"] .cell-passbar-fill        { color: var(--sig-buy-fg); }
-.stock-cell[data-signal="watch"] .cell-passbar-fill      { color: var(--sig-watch-fg); }
-.stock-cell[data-signal="avoid"] .cell-passbar-fill      { color: var(--sig-avoid-fg); }
+.stock-cell[data-signal="strong_buy"] .cell-passbar-fill { background: var(--sig-strong_buy-fg); }
+.stock-cell[data-signal="buy"] .cell-passbar-fill        { background: var(--sig-buy-fg); }
+.stock-cell[data-signal="watch"] .cell-passbar-fill      { background: var(--sig-watch-fg); }
+.stock-cell[data-signal="avoid"] .cell-passbar-fill      { background: var(--sig-avoid-fg); }
 
 .cell-value {
   font-size: 0.8rem;
-  color: var(--cell-value-color);
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
 .cell-score {
   margin-left: auto;
   font-size: 0.72rem;
-  color: var(--cell-score-color);
+  color: var(--text-secondary);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -454,14 +438,14 @@ function formatPrice(p) {
 
 .cell-price {
   font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--cell-price-color);
+  font-weight: 500;
+  color: var(--text-primary);
   white-space: nowrap;
 }
 
 .cell-turnover {
   font-size: 0.72rem;
-  color: var(--cell-value-color);
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -470,9 +454,6 @@ function formatPrice(p) {
   font-weight: 700;
   white-space: nowrap;
 }
-.pct-up   { color: var(--pct-up); }
-.pct-down { color: var(--pct-down); }
-.pct-flat { color: var(--pct-flat); }
 
 /* ── 指標 chips ── */
 .cell-chips {
@@ -488,9 +469,9 @@ function formatPrice(p) {
   align-items: center;
   gap: 2px;
   font-size: 0.7rem;
-  line-height: 1.35;
+  line-height: 1.4;
   padding: 0 5px;
-  border-radius: 3px;
+  border-radius: 4px;
   white-space: nowrap;
   background: var(--chip-bg);
   color: var(--chip-fg);
@@ -501,22 +482,25 @@ function formatPrice(p) {
 .chip--up   { color: var(--pct-up); }
 .chip--down { color: var(--pct-down); }
 
-.cell-highlighted {
-  animation: pulse-highlight 0.6s ease-in-out 3;
-  z-index: 20;
-}
+/* 有空間時顯示文字；窄卡片才退回單字圖示 */
+.chip:not(.chip--keep) .chip-icon { display: none; }
 
-@keyframes pulse-highlight {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.45; }
-}
-
-/* ── 窄卡片（6×6、手機 3×3）：chips 只留圖示，訊號改左緣色條 ── */
-@container (max-width: 210px) {
+/* ── 窄卡片（手機 3×3）：chips 只留圖示，訊號改左緣色條 ── */
+@container (max-width: 190px) {
   .chip:not(.chip--keep) .chip-text { display: none; }
+  .chip:not(.chip--keep) .chip-icon { display: inline; }
   .cell-signal { display: none; }
   .cell-signal-bar { display: block; }
   .cell-sector { display: none; }
+}
+
+/* ── 矮卡片（1366×768 的 6×6）：名稱與價格優先，先犧牲 chips ── */
+@container (max-height: 104px) {
+  .cell-chips { display: none; }
+}
+
+@container (max-height: 84px) {
+  .cell-metric { display: none; }
 }
 
 @container (max-width: 150px) {
@@ -524,31 +508,11 @@ function formatPrice(p) {
   .cell-turnover { display: none; }
 }
 
-@media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) {
-  .stock-cell {
-    transition: none;
-  }
-
-  .stock-cell::before {
-    display: none;
-  }
-
-  .stock-cell:hover {
-    filter: none;
-    transform: none;
-    border-color: var(--cell-border-default);
-  }
-}
-
-/* 矮螢幕：高度不足時先拿掉題材，保住字級 */
+/* 矮螢幕：收緊間距，保住字級 */
 @media (max-height: 768px) {
   .stock-cell {
-    padding: 4px 6px 4px 8px;
+    padding: 5px 8px;
     gap: 1px;
-  }
-
-  .cell-sector {
-    display: none;
   }
 
   .cell-name {

@@ -33,7 +33,7 @@ def merge_and_rank(
     Args:
         twse_records: TWSE 當日資料 [{stock_id, name, volume, price_change_pct}]
         tpex_records: TPEX 當日資料 [{stock_id, name, volume, price_change_pct}]
-        issue_shares: FinMind 股本 {stock_id: issue_shares}
+        issue_shares: 發行股數 {stock_id: issue_shares}（上市 + 上櫃）
 
     Returns:
         排名後的股票清單（所有股票，含 volume_rank, turnover_rank）
@@ -50,7 +50,8 @@ def merge_and_rank(
     # 週轉率 = 成交量 / 發行股數 × 100
     for r in records:
         shares = issue_shares.get(r["stock_id"], 0)
-        r["turnover_rate"] = round(r["volume"] / shares * 100, 4) if shares > 0 else 0.0
+        # 股本未知 = 無法計算，不是 0：存 None，前端顯示 —
+        r["turnover_rate"] = round(r["volume"] / shares * 100, 4) if shares > 0 else None
         r["color_tier"] = _color_tier(r.get("price_change_pct", 0.0))
 
     # Volume rank（降冪）
@@ -58,8 +59,8 @@ def merge_and_rank(
     for i, r in enumerate(by_vol, 1):
         r["volume_rank"] = i
 
-    # Turnover rank（降冪）
-    by_turn = sorted(records, key=lambda r: r["turnover_rate"], reverse=True)
+    # Turnover rank（降冪，未知者排最後）
+    by_turn = sorted(records, key=lambda r: (r["turnover_rate"] is None, -(r["turnover_rate"] or 0)))
     for i, r in enumerate(by_turn, 1):
         r["turnover_rank"] = i
 

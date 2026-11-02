@@ -77,14 +77,17 @@ export function useStockData() {
       }
     })()
 
-    inFlightPromise = request.finally(() => {
-      if (inFlightPromise === request) {
+    // Compare against the tracked promise itself: `request` is never the stored
+    // value, and a guard that is not released turns every later poll into a no-op.
+    const tracked = request.finally(() => {
+      if (inFlightPromise === tracked) {
         inFlightPromise = null
       }
       abortController = null
     })
+    inFlightPromise = tracked
 
-    return inFlightPromise
+    return tracked
   }
 
   function startPolling() {

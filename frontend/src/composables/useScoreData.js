@@ -1,7 +1,6 @@
 /**
  * useScoreData.js — buy score loader with progressive background fetch support
  *
- * - Reads finmind_token from localStorage and passes as X-FinMind-Token header
  * - When backend responds with {fetching: true}, polls every 30s to pick up
  *   partial results as they are written (every 50 stocks on the backend)
  * - setPartialScores: shows whatever scores exist while still showing '...' for
@@ -11,16 +10,13 @@
  *   have crashed; the backend stale-flag timeout lets a fresh force succeed)
  */
 
+import { onUnmounted } from 'vue'
 import { useStockStore } from '../stores/stockStore'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
-const STORAGE_KEY = 'finmind_token'
 const POLL_INTERVAL_MS = 30_000
 const STALL_MS = 5 * 60_000  // no progress for 5 min → allow manual retry
-
-export function getStoredToken() {
-  return localStorage.getItem(STORAGE_KEY) || ''
-}
+const RECHECK_MS = 300_000   // scores change nightly; a long-lived tab must still pick them up
 
 let _pollTimer = null
 let _lastScoredCount = 0
@@ -33,10 +29,6 @@ function _clearPoll() {
   }
 }
 
-function _buildHeaders(token) {
-  return token ? { 'X-FinMind-Token': token } : {}
-}
-
 function _scoredCount(scores) {
   if (!scores) return 0
   let n = 0
@@ -47,12 +39,12 @@ function _scoredCount(scores) {
   return n
 }
 
-async function _doFetch(url, headers = {}) {
+async function _doFetch(url) {
   _clearPoll()
   const store = useStockStore()
 
   try {
-    const res = await fetch(url, { headers })
+    const res = await fetch(url)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
 
@@ -80,32 +72,41 @@ async function _doFetch(url, headers = {}) {
       }
 
       // Poll with plain (no force) URL so each subsequent call doesn't re-wipe cache
-      const token = getStoredToken()
-      _pollTimer = setTimeout(
-        () => _doFetch(`${API_BASE}/api/scores`, _buildHeaders(token)),
-        POLL_INTERVAL_MS,
-      )
+      _pollTimer = setTimeout(() => _doFetch(`${API_BASE}/api/scores`), POLL_INTERVAL_MS)
       return
     }
 
     store.setScores(data.scores ?? {})
   } catch (err) {
     console.warn('[useScoreData] buy scores unavailable:', err.message)
-    store.setScores({})
+    // One failed request must not blank the risk flags on a screen that had them.
+    if (store.scoresLoaded) store.setScoresFetching(false)
+    else store.setScores({})
   }
 }
 
 export async function fetchScores() {
-  const token = getStoredToken()
-  return _doFetch(`${API_BASE}/api/scores`, _buildHeaders(token))
+  return _doFetch(`${API_BASE}/api/scores`)
+}
+
+/** Loads scores and re-checks for as long as the app runs (kiosks never reload). */
+export function useScorePolling() {
+  const store = useStockStore()
+  fetchScores()
+  const timer = setInterval(() => {
+    if (!document.hidden && !store.scoresFetching) fetchScores()
+  }, RECHECK_MS)
+  onUnmounted(() => {
+    clearInterval(timer)
+    _clearPoll()
+  })
 }
 
 export async function forceRefreshScores() {
-  const token = getStoredToken()
   const store = useStockStore()
   store.setScoresFetching(true)
   store.setScoresStalled(false)
   _lastScoredCount = 0
   _lastProgressAt = Date.now()
-  return _doFetch(`${API_BASE}/api/scores?force=true`, _buildHeaders(token))
+  return _doFetch(`${API_BASE}/api/scores?force=true`)
 }

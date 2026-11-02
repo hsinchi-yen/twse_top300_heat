@@ -17,6 +17,7 @@ import time
 import requests
 
 TPEX_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
+TPEX_COMPANY_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 
 _UA_POOL = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -50,6 +51,21 @@ def _http_get(url: str, timeout: int = 15, max_retries: int = 3) -> list:
                 time.sleep(wait)
     logger.error("TPEX fetch failed after %d attempts: %s", max_retries, last_exc)
     return []
+
+
+def fetch_tpex_issue_shares() -> dict[str, int]:
+    """上櫃公司發行股數 {stock_id: shares}；來源失敗時回傳空 dict。"""
+    result: dict[str, int] = {}
+    for row in _http_get(TPEX_COMPANY_URL):
+        stock_id = str(row.get("SecuritiesCompanyCode", "")).strip()
+        shares_str = str(row.get("IssueShares", "")).replace(",", "").strip()
+        if not stock_id or not shares_str.isdigit():
+            continue
+        shares = int(shares_str)
+        if shares > 0:
+            result[stock_id] = shares
+    logger.info("TPEX mopsfin_t187ap03_O: %d OTC companies with share data", len(result))
+    return result
 
 
 def fetch_tpex_daily() -> tuple[list[dict], str | None]:

@@ -29,11 +29,11 @@ from zoneinfo import ZoneInfo
 
 from sources.buy_score_engine import compute_buy_score
 from sources.finmind_client import FinMindError
+from sources.token_store import get_token
 
 logger = logging.getLogger(__name__)
 
 SCORES_DIR = Path(os.getenv("SCORES_DIR", "/app/data/buy_scores"))
-FINMIND_TOKEN = os.getenv("FINMIND_TOKEN", "")
 TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 REQUEST_DELAY = float(os.getenv("BUY_SCORE_REQUEST_DELAY", "1.2"))
 # How long to wait after quota exhaustion before resuming (default: 1 hour).
@@ -100,7 +100,7 @@ def fetch_buy_score(stock_id: str, token: str | None = None) -> dict | None:
     fetch failed) is treated as a failure (None), not persisted as 0/24.
     """
     try:
-        result = compute_buy_score(stock_id, token=token if token is not None else FINMIND_TOKEN)
+        result = compute_buy_score(stock_id, token=token if token is not None else get_token())
     except FinMindError:
         raise
     except Exception as exc:
@@ -154,7 +154,7 @@ def batch_fetch_scores(
     if not stock_ids:
         return {}
 
-    token = token if token is not None else FINMIND_TOKEN
+    token = token if token is not None else get_token()
     scores: dict[str, dict] = {}
     total = len(stock_ids)
 

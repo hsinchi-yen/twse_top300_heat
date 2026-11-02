@@ -1,5 +1,5 @@
 <template>
-  <span class="score-progress mono">
+  <span class="score-progress">
     <template v-if="scoresFetching">
       <span class="sp-bar" :title="`計分中 ${scoredCount} / ${totalCount}`">
         <span class="sp-bar-fill" :style="{ width: pct + '%' }" />
@@ -67,20 +67,18 @@ const lastUpdatedLabel = computed(() => {
 .score-progress {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.68rem;
-  color: var(--last-updated-color);
-  letter-spacing: 0.03em;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
 .sp-bar {
   position: relative;
-  width: 72px;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--ctrl-dot-bg, rgba(127, 127, 127, 0.25));
+  width: 64px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--chip-bg);
   overflow: hidden;
 }
 
@@ -88,22 +86,19 @@ const lastUpdatedLabel = computed(() => {
   position: absolute;
   inset: 0 auto 0 0;
   height: 100%;
-  background: linear-gradient(90deg, var(--title-from, #4caf50), var(--title-to, #2196f3));
-  border-radius: 3px;
+  background: var(--accent);
+  border-radius: 2px;
   transition: width 0.4s ease;
 }
 
 .sp-text { font-variant-numeric: tabular-nums; }
-.sp-done { opacity: 0.85; }
 
-@media (max-width: 1366px), (max-height: 768px) {
-  .score-progress { font-size: 0.62rem; }
-  .sp-bar { width: 56px; }
+@media (max-width: 1280px) {
+  .sp-done { display: none; }
 }
 
-/* 手機直屏：只留進度條，省空間 */
 @media (max-width: 640px) {
-  .sp-done { display: none; }
   .sp-bar { width: 44px; }
+  .sp-text { display: none; }
 }
 </style>

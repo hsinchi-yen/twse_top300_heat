@@ -7,7 +7,7 @@
     <template v-else>
       <ul v-if="risks.length" class="risk-list">
         <li v-for="r in risks" :key="r.name" class="risk-item" :title="r.description">
-          ⚠ {{ r.name }} <span class="risk-val num">{{ r.value_label }}</span>
+          {{ r.name }} <span class="risk-val num">{{ r.value_label }}</span>
         </li>
       </ul>
 
@@ -75,58 +75,56 @@ onMounted(async () => {
 
 <style scoped>
 .score-detail {
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
   color: var(--text-primary);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 
-.detail-msg {
-  color: var(--text-secondary);
-}
-.detail-msg--error { color: var(--ctrl-error-color); }
+.detail-msg { color: var(--text-muted); }
+.detail-msg--error { color: var(--pct-up); }
 
 .risk-list,
 .crit-group ul {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .risk-item {
   color: var(--chip-warn-fg);
   background: var(--chip-warn-bg);
-  border-radius: 3px;
-  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
 }
 .risk-val { margin-left: 4px; opacity: 0.85; }
 
 .crit-head {
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: var(--text-secondary);
-  margin-bottom: 2px;
+  margin-bottom: 3px;
 }
 
 .crit {
   display: grid;
   grid-template-columns: 1.1em 1fr auto;
-  gap: 4px;
+  gap: 6px;
   align-items: baseline;
 }
 .crit-mark { font-weight: 700; }
-.crit--pass .crit-mark { color: var(--sig-strong_buy-fg); }
-.crit--fail .crit-mark { color: var(--sig-avoid-fg); }
-.crit--na              { color: var(--text-secondary); }
+.crit--pass .crit-mark { color: var(--accent); }
+.crit--fail .crit-mark { color: var(--warn); }
+.crit--na              { color: var(--text-muted); }
 .crit-val {
-  color: var(--cell-value-color);
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
 .detail-date {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 </style>

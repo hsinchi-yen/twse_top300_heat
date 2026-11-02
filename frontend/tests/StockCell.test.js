@@ -31,7 +31,6 @@ function mountCell(props = {}) {
     props: {
       stock: makeStock(),
       mode: 'turnover',
-      highlighted: false,
       scoresLoaded: false,
       buyScore: null,
       ...props,
@@ -130,6 +129,16 @@ describe('StockCell — buy score display', () => {
       expect(w.find('.cell-turnover').text()).toBe('—')
     })
 
+    it('shows dash, not 0.00%, for a stored zero on a traded stock', () => {
+      setActivePinia(createPinia())
+      const cell = (mode) => mount(StockCell, {
+        props: { stock: makeStock({ turnover_rate: 0 }), mode, scoresLoaded: true, buyScore: null },
+      })
+      expect(cell('buy_score').find('.cell-turnover').text()).toBe('—')
+      expect(cell('turnover').text()).not.toContain('0.00%')
+      expect(cell('turnover').text()).toContain('—')
+    })
+
     it('does NOT render turnover in volume/turnover modes', () => {
       expect(mountCell({ mode: 'turnover' }).find('.cell-turnover').exists()).toBe(false)
       expect(mountCell({ mode: 'volume' }).find('.cell-turnover').exists()).toBe(false)
@@ -137,13 +146,14 @@ describe('StockCell — buy score display', () => {
   })
 
   describe('fundamentals uptrend badge', () => {
-    it('shows ✅ badge in buy_score mode when fundamentals_uptrend is true', () => {
+    it('shows the ✅ badge in buy_score mode when fundamentals_uptrend is true', () => {
       const w = mountCell({
         mode: 'buy_score', scoresLoaded: true,
         buyScore: { score: 18, max_score: 24, fundamentals_uptrend: true },
       })
       expect(w.find('.cell-fundamentals-badge').exists()).toBe(true)
-      expect(w.find('.cell-fundamentals-badge').text()).toContain('✅')
+      expect(w.find('.cell-fundamentals-badge').text()).toBe('✅')
+      expect(w.find('[data-chip="uptrend"]').exists()).toBe(false)
     })
 
     it('hides badge when fundamentals_uptrend is false', () => {
@@ -228,13 +238,12 @@ describe('StockCell — buy score display', () => {
   })
 
   describe('indicator chips', () => {
-    it('shows 💲低估 when P/E below p25', () => {
+    it('shows 低估 when P/E below p25', () => {
       const w = mountCell({
         mode: 'buy_score', scoresLoaded: true,
         buyScore: { score: 18, max_score: 24, pe: { current: 15, median: 24, p25: 18 } },
       })
       const chip = w.find('[data-chip="value"]')
-      expect(chip.text()).toContain('💲')
       expect(chip.text()).toContain('低估')
     })
 

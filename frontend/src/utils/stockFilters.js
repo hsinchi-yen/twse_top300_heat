@@ -16,7 +16,7 @@ export const CONDITIONS = {
   pass75:    { label: '通過率≥75%',    test: (c) => num(c.score?.pass_rate) >= 75 },
   pass60:    { label: '通過率≥60%',    test: (c) => num(c.score?.pass_rate) >= 60 },
   noRisk:    { label: '無排雷',         test: (c) => c.score?.risk_score === 0 },
-  uptrend:   { label: '營收EPS轉強✅',  test: (c) => c.score?.fundamentals_uptrend === true },
+  uptrend:   { label: '營收EPS轉強',  test: (c) => c.score?.fundamentals_uptrend === true },
   cheap:     { label: 'P/E<5年p25',    test: (c) => num(c.score?.pe?.current) < num(c.score?.pe?.p25) },
   aboveMa20: { label: '站上月線',       test: (c) => c.daily?.above_ma20 === true },
   aboveMa60: { label: '站上季線',       test: (c) => c.daily?.above_ma60 === true },

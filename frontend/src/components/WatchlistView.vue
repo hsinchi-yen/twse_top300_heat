@@ -1,13 +1,15 @@
 <template>
   <div class="watchlist-container">
     <div v-if="wl.error" class="watch-error">
-      ⚠ {{ wl.error }}
-      <button class="watch-error-close" @click="wl.clearError()">×</button>
+      {{ wl.error }}
+      <button class="icon-btn watch-error-close" aria-label="關閉" @click="wl.clearError()"><Icon name="close" :size="14" /></button>
     </div>
+
+    <ComparePanel v-if="selected.length" :selected="selected" @remove="toggleCompare" />
 
     <div v-if="!wl.loaded" class="watchlist-empty">載入自選股…</div>
     <div v-else-if="wl.items.length === 0" class="watchlist-empty">
-      尚未釘選股票：在成交量／週轉率／買進評分卡片右上角點 ☆（手機長按卡片）加入自選
+      尚未釘選股票：在熱力圖卡片右上角點 ☆（手機長按卡片），或從個股面板加入自選
     </div>
 
     <div v-else class="watch-grid">
@@ -22,9 +24,15 @@
             :scores-fetching="scoresFetching"
             :daily="signals[item.stock_id] ?? null"
             :market-open="marketOpen"
+            clickable
+            @open="ui.openStock"
           />
           <div v-else class="watch-noquote">{{ item.stock_id }} 最新交易日無報價</div>
         </div>
+
+        <ul v-if="alertsFor(item).length" class="watch-alerts">
+          <li v-for="a in alertsFor(item)" :key="a.key" class="tag watch-alert" :data-alert="a.key">{{ a.label }}</li>
+        </ul>
 
         <div class="watch-meta">
           <input
@@ -32,24 +40,34 @@
             class="watch-note-input"
             :value="item.note"
             maxlength="500"
-            placeholder="研究筆記／買進理由"
+            placeholder="買進理由、預計停損、什麼情況要賣"
             @keydown.enter="saveNote(item.stock_id, $event.target.value)"
             @blur="saveNote(item.stock_id, $event.target.value)"
           />
-          <span
+          <button
             v-else
             class="watch-note"
             :class="{ 'is-empty': !item.note }"
             :title="item.note"
             @click="editing = item.stock_id"
-          >{{ item.note || '＋ 寫筆記' }}</span>
+          >{{ item.note || '＋ 寫下買進理由' }}</button>
 
           <button
-            class="watch-btn watch-expand"
+            class="btn watch-compare"
+            :class="{ 'is-selected': isSelected(item.stock_id) }"
+            :aria-pressed="isSelected(item.stock_id)"
+            :disabled="!item.quote || (!isSelected(item.stock_id) && selected.length >= MAX_COMPARE)"
+            :title="selected.length >= MAX_COMPARE && !isSelected(item.stock_id) ? `最多比較 ${MAX_COMPARE} 檔` : ''"
+            @click="toggleCompare(item.stock_id)"
+          >比較</button>
+          <button
+            class="btn watch-expand"
             :aria-expanded="expanded.has(item.stock_id)"
             @click="toggleExpand(item.stock_id)"
           >{{ expanded.has(item.stock_id) ? '收合' : '明細' }}</button>
-          <button class="watch-btn watch-remove" title="移出自選" @click="wl.unpin(item.stock_id)">✕</button>
+          <button class="icon-btn watch-remove" title="移出自選" aria-label="移出自選" @click="wl.unpin(item.stock_id)">
+            <Icon name="close" :size="16" />
+          </button>
         </div>
 
         <ScoreDetail v-if="expanded.has(item.stock_id)" :stock-id="item.stock_id" class="watch-detail" />
@@ -63,14 +81,45 @@ import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useStockStore } from '../stores/stockStore'
 import { useWatchlistStore } from '../stores/watchlistStore'
+import { useUiStore } from '../stores/uiStore'
+import { watchAlerts } from '../utils/analysis'
+import Icon from './Icon.vue'
 import StockCell from './StockCell.vue'
 import ScoreDetail from './ScoreDetail.vue'
+import ComparePanel from './ComparePanel.vue'
 
 const wl = useWatchlistStore()
+const ui = useUiStore()
 const { scores, scoresLoaded, scoresFetching, signals, marketOpen } = storeToRefs(useStockStore())
+
+const MAX_COMPARE = 3   // the palette's first three slots are the set validated all-pairs
 
 const editing = ref('')
 const expanded = ref(new Set())
+// [{id, slot}]: a stock keeps its colour slot while it stays selected
+const selected = ref([])
+
+const isSelected = (id) => selected.value.some(s => s.id === id)
+
+function toggleCompare(id) {
+  if (isSelected(id)) {
+    selected.value = selected.value.filter(s => s.id !== id)
+    return
+  }
+  if (selected.value.length >= MAX_COMPARE) return
+  const used = new Set(selected.value.map(s => s.slot))
+  const slot = [1, 2, 3].find(n => !used.has(n))
+  selected.value = [...selected.value, { id, slot }]
+}
+
+function alertsFor(item) {
+  if (!item.quote) return []
+  return watchAlerts({
+    stock: item.quote,
+    score: scores.value[item.stock_id],
+    daily: signals.value[item.stock_id],
+  })
+}
 
 function toggleExpand(id) {
   const next = new Set(expanded.value)
@@ -93,29 +142,22 @@ async function saveNote(id, note) {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
 .watchlist-empty {
-  color: var(--ctrl-state-color);
+  color: var(--text-secondary);
   text-align: center;
   padding: 4rem 1rem;
-  font-size: 0.95rem;
+  font-size: 0.9375rem;
 }
 
 .watch-error {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  color: var(--ctrl-error-color);
-  font-size: 0.8rem;
-}
-.watch-error-close {
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  font-size: 1rem;
+  gap: 8px;
+  color: var(--pct-up);
+  font-size: 0.8125rem;
 }
 
 .watch-grid {
@@ -123,23 +165,22 @@ async function saveNote(id, note) {
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 10px;
   align-content: start;
+  align-items: start;
 }
 
 .watch-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 8px;
-  background: var(--sector-bg);
-  border: 1px solid var(--sector-border);
+  gap: 8px;
+  padding: 8px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
 }
 
 /* 自選卡片放大：大字級 + 固定高度讓所有列都看得到 */
-.watch-cell {
-  height: 150px;
-}
-.watch-cell :deep(.cell-name)     { font-size: 1.3rem; }
+.watch-cell { height: 150px; }
+.watch-cell :deep(.cell-name)     { font-size: 1.25rem; }
 .watch-cell :deep(.cell-passrate) { font-size: 1.5rem; }
 .watch-cell :deep(.cell-pct)      { font-size: 1.05rem; }
 .watch-cell :deep(.cell-price)    { font-size: 1rem; }
@@ -151,10 +192,18 @@ async function saveNote(id, note) {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px dashed var(--cell-empty-border);
-  border-radius: 6px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
 }
+
+.watch-alerts {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.watch-alert { background: var(--chip-warn-bg); color: var(--chip-warn-fg); }
 
 .watch-meta {
   display: flex;
@@ -166,46 +215,45 @@ async function saveNote(id, note) {
 .watch-note {
   flex: 1;
   min-width: 0;
-  font-size: 0.8rem;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 0.8125rem;
   color: var(--text-primary);
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: text;
 }
-.watch-note.is-empty { color: var(--text-secondary); }
+.watch-note.is-empty { color: var(--text-muted); }
+
+.watch-compare.is-selected {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
 
 .watch-note-input {
   flex: 1;
   min-width: 0;
-  font-size: 0.8rem;
-  padding: 2px 6px;
-  background: var(--ctrl-search-bg);
-  border: 1px solid var(--ctrl-search-focus-border);
-  border-radius: 4px;
-  color: var(--ctrl-search-color);
+  height: 32px;
+  padding: 0 8px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
   outline: none;
 }
 
-.watch-btn {
-  flex-shrink: 0;
-  font-size: 0.75rem;
-  padding: 2px 8px;
-  border-radius: 4px;
-  border: 1px solid var(--ctrl-page-btn-border);
-  background: var(--ctrl-page-btn-bg);
-  color: var(--ctrl-page-btn-color);
-  cursor: pointer;
-}
-.watch-remove { color: var(--text-secondary); }
-
 .watch-detail {
-  border-top: 1px solid var(--sector-border);
-  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 8px;
 }
 
 @media (max-width: 768px) {
-  .watch-grid { grid-template-columns: 1fr; }
-  .watch-btn  { min-height: 36px; min-width: 44px; }
+  .watch-grid { grid-template-columns: minmax(0, 1fr); }
+  .watch-meta :deep(.btn) { min-height: 36px; }
 }
 </style>

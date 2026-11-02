@@ -1,20 +1,23 @@
 # Spec: 台股熱力圖 Dashboard
 
-> Updated: 2026-10-26 (watchlist, daily signals, filters, nightly schedule)
+> Updated: 2026-11-02 (overview, stock panel, market trend, setup validation, position sizing)
 > This spec reflects the current implementation, including legacy route names that remain in service.
 
 ## Objective
 
 建立一個可長時間連續運行的台股熱力圖 Dashboard：
 - 股票主畫面使用固定 `600` 檔顯示池
+- 提供 `總覽`（市場狀態、族群輪動、候選清單）作為預設入口
 - 提供 `成交量`、`週轉率`、`買進評分` 三種股票視角 + `自選股` 視圖
 - 提供獨立 ETF 視圖
+- 任一股票可開啟個股分析面板：趨勢、法人、評分走勢、基本面明細、部位試算
 - 部署於 Yocto ARM64，依賴 SQLite + Docker + `--network host`
 
 ## User-facing modes
 
 | Mode | Data source | Sort rule |
 |---|---|---|
+| `overview` | same 600-stock payload + `/api/scores` + `/api/signals` + `/api/market/trend` + `/api/market/backtest` | shortlist by 綜合分 (frontend) |
 | `volume` | `/api/stocks/top100?mode=volume&limit=600` | backend `volume_rank` |
 | `turnover` | same 600-stock payload as `volume` | frontend re-sort by `turnover_rate` |
 | `buy_score` | same 600-stock payload + `/api/scores` | frontend re-sort by buy score |
@@ -41,13 +44,80 @@ to no filter when storage is unavailable) and survives mode switches.
 550 ms). Watchlist loads once at startup and polls only while `watchlist` mode is
 active (60s 盤中 / 5min 盤後).
 
+The active mode persists in `localStorage` (`view_mode`; falls back to `overview`),
+so a kiosk keeps the view it was left on.
+
+Navigation: 總覽 ｜ 熱力圖 ｜ ETF ｜ 自選. 熱力圖 covers `volume` / `turnover` /
+`buy_score` via a segmented sort control; these stay distinct `mode` values and
+never change the stock API query. Global search (code or name) covers the display
+pool ∪ watchlist and opens the stock panel.
+
+## Analysis layer (frontend-only)
+
+`frontend/src/utils/analysis.js` derives everything below from the same payloads
+the cards use. It is display logic: it never writes back, and `/api/scores` is not
+changed by it. Missing input stays missing — a dimension without data is `null`,
+never a fallback number.
+
+| Dimension | Weight | Input | Score (0–100) |
+|---|---|---|---|
+| 基本面 `quality` | 40% | `pass_rate`, `eligible_count`, `fundamentals_uptrend` | `pass_rate`, +5 when uptrend, capped at 100; `null` when `eligible_count < 12` (a new listing or failed datasets: 6/6 would read as a perfect score, and failed datasets also skip 排雷 checks, so `risk_score` 0 is not "no risk") |
+| 趨勢 `trend` | 25% | `above_ma20`, `above_ma60`, `pct_from_52w_high` | earned ÷ available of: MA20 35, MA60 35, 距高點 30 (≥-5% 30, ≥-15% 20, ≥-30% 10, else 0); needs at least one MA flag |
+| 籌碼 `flow` | 20% | `inst_streak`, `inst_net_5d` | `50 + 8 × clamp(streak, ±5)`, ±10 by sign of `inst_net_5d`, clamped to 0–100 |
+| 評價 `value` | 15% | `pe.current`, `pe.p25`, `pe.median` | `< p25` 90, `< median` 65, `≤ 1.25 × median` 40, else 20; `current ≤ 0` or missing → `null` |
+
+- 綜合分 = weighted mean over available dimensions, then `-10` per triggered 排雷
+  item, floored at 0. It is `null` unless `quality` is present and at least 3
+  dimensions are.
+- The weights are editorial heuristics, not fitted to returns. The UI must say so.
+- 投資人狀態 (`stance`), first match wins:
+
+| Stance | Rule |
+|---|---|
+| `avoid` 避開 | `risk_score ≥ 2` or signal `avoid` |
+| `insufficient` 資料不足 | 綜合分 `null` |
+| `wait_pullback` 等回檔 | 綜合分 `≥ 60` and live price `> 1.10 × ma20` |
+| `candidate` 研究候選 | 綜合分 `≥ 70` and live price above `ma20` |
+| `watch` 觀察 | 綜合分 `≥ 55` |
+| `pass` 暫不考慮 | otherwise |
+
+候選清單 = stocks with stance `candidate` or `wait_pullback`, 綜合分 desc →
+`inst_net_5d` desc. Wording is research language ("研究候選"), never an instruction
+or a return claim.
+
+自選警示 (watchlist): 跌破月線 / 跌破季線 (live price vs. nightly MA), 法人連賣 ≥ 3,
+排雷 ≥ 1, 距 52 週高點 ≤ -20%.
+
+部位試算 (`frontend/src/utils/positionSizing.js`): shares = min(capital × 單筆風險% ÷
+(entry − stop), capital × 單檔上限% ÷ entry), floored to whole 張 (1000 股); 零股
+shown when under 1 張. Reports max loss, position %, 成交量占比 against
+`avg_volume_5d` (warns above 5%), and round-trip cost using the statutory 0.1425% × 2
++ 0.3% 證交稅, no broker discount. Default stop = `ma60` when it sits 3–8% below the
+price, otherwise price − 8%: closer than 3% is noise (the stop would trigger on an
+ordinary day and inflate the position), further than 8% risks too much. Settings
+persist per viewer in `localStorage`.
+
+族群下鑽: a sector row on the overview opens the heatmap limited to that sector.
+Frontend-only over the same 600-stock payload; combines with the filter conditions;
+shown as a removable chip; not persisted.
+
+比較 (watchlist): up to 3 pinned stocks side by side. Chart = closes over the last 6
+months on the dates all selected stocks share, rebased to 100 at the first shared
+date (one axis, never dual). Table = 綜合分, stance, the four dimensions, price, 期間
+報酬, P/E, 法人 5 日. A stock keeps its colour while it stays selected. History comes
+from `/api/stocks/{stock_id}/history?days=132`, fetched on selection.
+
+使用說明 (Guide): in-app, explains the workflow and the limits of the data. Every
+analysis surface shows that this is not investment advice and that the score has
+not been shown to predict returns.
+
 ## Core invariants
 
 1. Frontend stock view always fetches `mode=volume&limit=600`
 2. Buy-score computation lives only in `crawler/`
 3. Force refresh is file-based and non-blocking
 4. Buy-score cache writes are atomic `.tmp -> rename`
-5. Token stays in crawler env (`FINMIND_TOKEN`), never in query string
+5. Token is stored server-side only (`FINMIND_TOKEN_FILE`, set from the UI gear via `/api/settings/finmind-token`, fallback to crawler env `FINMIND_TOKEN`); never in query string, logs, or any API response; the browser never persists it
 6. ETF data path is independent from stock data path
 
 ## Commands
@@ -87,8 +157,13 @@ Twse_Top100_Heat/
 │   └── routers/
 │       ├── stocks.py
 │       ├── scores.py
+│       ├── market.py
+│       ├── signals.py
+│       ├── watchlist.py
 │       ├── etf.py
 │       └── sectors.py
+│   └── services/
+│       └── market_analytics.py
 ├── crawler/
 │   ├── main.py
 │   ├── etf_main.py
@@ -106,9 +181,10 @@ Twse_Top100_Heat/
 └── frontend/
     └── src/
         ├── constants.js
-        ├── stores/stockStore.js
+        ├── stores/
         ├── composables/
-        └── components/
+        ├── utils/          # analysis.js, positionSizing.js, signals.js, stockFilters.js
+        └── components/     # charts/ holds the dependency-free SVG charts
 ```
 
 ## Runtime architecture
@@ -154,6 +230,117 @@ TWSE ETF + Yahoo ETF asset scale
 
 ## API contract
 
+### `GET /api/stocks/{stock_id}/history`
+
+Price, moving-average and institutional history for the stock panel. Reads the
+crawler's `daily_bars` / `inst_flows` (read-only; a missing table means "not
+computed yet").
+
+Query params: `days=20..260` (default `260`).
+
+```json
+{
+  "stock_id": "2330",
+  "date": "2026-10-23",
+  "bars": [
+    { "date": "2026-10-23", "close": 1045.0, "volume": 41000000, "ma20": 1010.5, "ma60": 980.2 }
+  ],
+  "flows": [
+    { "date": "2026-10-23", "foreign_net": 3200, "trust_net": 400, "dealer_net": -50 }
+  ]
+}
+```
+
+- `bars` / `flows` ascending; `flows` = all retained days (≤ `SIGNALS_INST_KEEP_DAYS`)
+- MAs are computed over all retained bars before trimming to `days`, so the first
+  returned row is not `null` merely because of the window; `null` = fewer than 20 / 60
+  bars exist
+- closes are unadjusted (same caveat as Daily signal rules)
+- unknown stock or missing tables → `200` with empty lists and `date: ""`
+- supports `ETag` + `Cache-Control` (`SIGNALS_CACHE_TTL_SECONDS`)
+
+### `GET /api/market/trend`
+
+Market breadth and sector rotation over the signal universe, derived from
+`daily_bars` + `sector_map` + `inst_flows`; memoized until the bars, the flows or a
+sector mapping change.
+
+Query params: `days=20..120` (default `60`).
+
+```json
+{
+  "date": "2026-10-23",
+  "universe": 612,
+  "breadth": [
+    { "date": "2026-10-23", "advancers": 320, "decliners": 250, "unchanged": 42,
+      "pct_above_ma20": 56.1, "pct_above_ma60": 61.3, "ew_index": 104.2 }
+  ],
+  "sectors": [
+    { "name": "半導體", "count": 52, "ret_5d": 2.1, "ret_20d": 6.4, "ret_60d": 11.2,
+      "pct_above_ma20": 71.0, "inst_net_5d": 125000 }
+  ]
+}
+```
+
+- `breadth` ascending. `pct_above_*` is over stocks with enough history that day
+  (`null` when fewer than 20 qualify). `ew_index` = chain-linked equal-weight mean
+  daily return, rebased to 100 at the first returned day
+- a daily move beyond ±11% is treated as a corporate action (limit is ±10%) and
+  excluded from `ew_index` and advancers / decliners
+- sector `ret_*` = **median** stock return over N market days of the calendar, not
+  N of the stock's own bars, which can skip days when it leaves and re-enters the
+  universe. A stock without a bar N market days back, or with any bar-to-bar move
+  beyond ±11% inside the window, is excluded (`null` under 3 stocks with data);
+  sectors with fewer than 3 stocks and `其他` are omitted; sorted by `ret_20d` desc,
+  nulls last
+- `inst_net_5d` = 外資 + 投信 net over the last 5 flow dates, 張; `null` without flows
+- universe is today's most-traded names, so history is survivorship-biased; the
+  UI must say so
+- missing tables → `{"date": "", "universe": 0, "breadth": [], "sectors": []}`
+- supports `ETag` + `Cache-Control` (`SIGNALS_CACHE_TTL_SECONDS`)
+
+### `GET /api/market/backtest`
+
+Historical check of the **technical** setups over retained `daily_bars`. Buy scores
+are not validated here: only 7 score files are retained, so the score has no
+history to test.
+
+Query params: `horizon=5|20|60` (default `20` trading days).
+
+```json
+{
+  "date": "2026-10-23",
+  "horizon": 20,
+  "periods": 11,
+  "baseline": { "avg_ret": 1.8, "win_rate": 54.2 },
+  "setups": [
+    { "key": "trend_up", "label": "站上月季線", "periods": 11, "beat_periods": 7,
+      "samples": 2400, "avg_ret": 2.6, "avg_excess": 0.8, "win_rate": 57.1,
+      "worst_period_ret": -9.4 }
+  ]
+}
+```
+
+- Evaluated on non-overlapping signal dates every `horizon` trading days, walking
+  back from the last date with a forward bar, so a period is one independent look.
+  Only data on or before the signal date decides membership (no look-ahead)
+- Entry is the close of the day **after** the signal: signals publish at 03:00, so
+  the signal day's own close, and the gap that created the signal, cannot be traded
+- A period counts only with ≥ 5 member stocks. Return = close(t+1+horizon) ÷
+  close(t+1) − 1, unadjusted, before costs. A stock missing either bar, or with any
+  bar-to-bar move beyond ±11% while held, is excluded from that period: a single-day
+  move past the limit is a corporate action, while a run of limit-downs is a real
+  loss and stays in
+- `avg_ret` = mean of period means; `avg_excess` = mean of (setup − baseline);
+  `beat_periods` = periods above baseline; `win_rate` = stocks with a positive
+  return, pooled; `worst_period_ret` = lowest period mean
+- `setups`: `trend_up` 站上月季線 (close > MA20 ∧ close > MA60), `breakout` 量增突破
+  (量比 ≥ 2 ∧ up day ∧ close > MA60), `near_high` 近半年高 (within 5% of the 120-day
+  closing high), `pullback` 多頭回檔 (close > MA60 ∧ close 0–5% below MA20)
+- empty state (too little history, missing tables):
+  `{"date": "", "horizon": 20, "periods": 0, "baseline": null, "setups": []}`
+- supports `ETag` + `Cache-Control` (`SIGNALS_CACHE_TTL_SECONDS`)
+
 ### `GET /api/stocks/top100`
 
 Query params:
@@ -164,7 +351,14 @@ Implementation notes:
 - Route name is historical; it is not limited to 100 rows
 - Frontend stock UI always uses `mode=volume&limit=600`
 - `market_open` is computed from current Taipei time (`Mon-Fri`, `09:00-13:30`)
-- `updated_at` is the API response timestamp, not the trade-source timestamp
+- `updated_at` is the API response timestamp, not the trade-source timestamp. The
+  header therefore shows its clock time only when it falls on the data `date`
+  (Taipei); otherwise it shows the date alone, so a weekend request never reads as
+  a trade time
+- `turnover_rate` = `volume / issued shares × 100`, with issued shares from TWSE
+  `t187ap03_L` plus TPEx `mopsfin_t187ap03_O`. It is `null` when the share count is
+  unknown, never `0.0`; such a stock ranks last. Rows written before this rule can
+  still hold `0.0`, so the frontend renders any non-positive rate as `—`
 - Supports `ETag` + `Cache-Control`
 
 Example:
@@ -195,12 +389,31 @@ Example:
 }
 ```
 
+### `/api/settings/finmind-token`
+
+Lets the operator set the FinMind token from the UI settings gear. The token is
+write-only: no response ever contains it.
+
+- `GET` → `{"configured": bool, "hint": "****abcd" | null}`. `configured` reflects the
+  UI-set token only (the backend has no `FINMIND_TOKEN` env, so an env-only token
+  shows as not configured). `hint` = last 4 chars, only when the token is >= 12 chars
+- `PUT` body `{"token": "<string>"}` → same shape as GET. Token is trimmed; 422 when
+  empty, containing whitespace, or longer than 512 chars
+- `DELETE` → removes the UI token (falls back to env); same shape as GET
+- Storage: file `FINMIND_TOKEN_FILE` (default `/app/data/.finmind_token`) on the
+  data volume shared with the crawler; written `.tmp -> rename`, mode `0600`
+- The crawler resolves the token at every score job / signals job (file first,
+  then `FINMIND_TOKEN` env), so a change applies to the next run without restart
+- The token is never logged and never accepted in a query string
+- No authentication: anyone who can reach the backend can replace the token.
+  Deploy on a trusted network only
+
 ### `GET /api/scores`
 
 Behavior:
 - backend only reads the newest JSON in `SCORES_DIR`
 - `force=true` writes a refresh flag if no fetch is already active
-- `X-FinMind-Token` header is accepted but ignored
+- `X-FinMind-Token` header is accepted but ignored (the token comes only from the server-side store)
 - `fetching=true` when `.scoring_in_progress` or `.force_refresh` exists.
   `score_job` / resume own `.scoring_in_progress`, so ALL scoring paths (nightly
   cron, force refresh, quota-resume) surface fetching + progress identically
@@ -282,6 +495,28 @@ Per-stock score detail, read on demand (watchlist expand, desktop tooltip).
   "risk_criteria": []
 }
 ```
+
+### `GET /api/scores/{stock_id}/history`
+
+The stock's score across the retained score files (at most 7), oldest first.
+
+```json
+{
+  "stock_id": "2330",
+  "points": [
+    { "date": "2026-10-22", "score": 17, "eligible_count": 23, "pass_rate": 73.9,
+      "signal": "buy", "risk_score": 0 }
+  ]
+}
+```
+
+- files that lack the stock are skipped (no gap filling here); legacy entries have
+  `null` for fields they never stored; corrupt files are skipped
+- a score file can carry a stock's previous entry when a run did not re-score it
+  (`crawler/main.py` merges onto the prior baseline), so a flat stretch may mean "not
+  re-scored", not "unchanged"
+- unknown stock → `200` with `points: []`
+- per-file memory cache keyed by path + mtime
 
 ### `GET /api/watchlist`
 
@@ -456,22 +691,27 @@ Updates a single `sector_map` entry.
   each card shows 訊號徽章 ｜ 通過率（大字 + 進度條）｜ 分數 `score/eligible_count`
   ｜ 價格 ｜ 週轉率 ｜ 漲跌幅 ｜ 指標 chips. Card background follows `signal`
   (金／青／灰藍／暗灰／紫斜紋 — never red/green); volume / turnover views keep the
-  price-change heat tint but show the same badge + chips
+  price-change heat tint but show the same badge + chips. Clicking a card opens the
+  stock panel (Enter / Space on keyboard)
 - Card typography: minimum `0.7rem`; elements that do not fit are hidden (narrow
   cards: chip text + sector hidden, signal badge becomes a 4px left bar)
 - `fundamentals_uptrend`: derived indicator, computed in `buy_score_engine.py`
   from the same monthly-revenue and quarterly-EPS series used by the
   `revenue_yoy` / `eps_yoy` criteria, but with a stricter all-3-months-positive
-  rule for revenue; not scored, shown as a ✅ badge on the card
+  rule for revenue; not scored, shown as a 轉強 chip on the card
 
 ## Nightly schedule (`crawler/main.py::nightly_job`)
 
 Data need not be real-time (user decision 2026-10-26). Every day at `03:00`:
 
-1. fetch the official TWSE / TPEx close feeds; the previous calendar day was a
-   trading day iff the TWSE feed's trade date equals it (TWSE unreachable →
-   fall back to the latest `stock_ranks` date). Otherwise do nothing — weekends
-   and holidays trigger no fetching, no trading calendar is maintained
+1. fetch the official TWSE / TPEx close feeds; there is work to do iff the TWSE
+   feed reports a trade date newer than the last one processed
+   (`MAX(stock_signals.date)`; never processed counts as newer). TWSE unreachable →
+   fall back to "the latest `stock_ranks` date is yesterday". Otherwise do nothing —
+   weekends and holidays produce no new date, so no trading calendar is maintained.
+   The OpenAPI feed publishes after 03:00 (on Saturday 03:00 it still reports
+   Thursday), so comparing it with yesterday can never match: a run covers the newest
+   date the feed reports, typically the session before last
 2. daily signals for that trade date (below)
 3. `score_job()` — full candidate-pool recompute for the new run date
    (~80–90 min within the 6000 req/h FinMind tier); failures in step 2 do not
@@ -485,7 +725,7 @@ after the next nightly run.
 ## Daily signal rules (`crawler/signals.py`)
 
 - Trade date = date reported by the official TWSE `STOCK_DAY_ALL` / TPEx daily
-  close feeds. Bars come only from a feed whose date equals the trade date
+  close feeds (not "yesterday": see Nightly schedule). Bars come only from a feed whose date equals the trade date
   (never from `stock_ranks`, whose intraday/Yahoo fallback rows can carry a stale
   close under today's date)
 - 三大法人: TWSE `rwd/zh/fund/T86?date=YYYYMMDD&selectType=ALLBUT0999` (上市) and
@@ -531,7 +771,8 @@ signal_backfill(stock_id PRIMARY KEY, bars_at)
 | Variable | Default | Purpose |
 |---|---|---|
 | `DATABASE_URL` | implementation-specific | SQLite location |
-| `FINMIND_TOKEN` | `""` | crawler-only buy-score token |
+| `FINMIND_TOKEN` | `""` | fallback buy-score token (crawler env) |
+| `FINMIND_TOKEN_FILE` | `/app/data/.finmind_token` | UI-set token file shared by backend (writes) and crawler (reads); takes precedence over env |
 | `SCORES_DIR` | `/app/data/buy_scores` | shared score JSON directory |
 | `SCORE_CANDIDATE_LIMIT` | `600` | score candidate pool limit (also the daily-signal universe) |
 | `BUY_SCORE_REQUEST_DELAY` | `1.2` | delay between stocks |
@@ -580,7 +821,10 @@ All production containers use `--network host`.
 | Backend API | `pytest` | stocks / scores / etf response contracts |
 | Backend logic | `pytest` | ranking and DB behavior |
 | Crawler score engine | `pytest` | native buy-score computation |
-| Frontend | `vitest` | store, composables, sorting, rendering helpers |
+| Backend analytics | `pytest` | breadth, sector rotation, setup validation (no look-ahead) |
+| Backend integration | `pytest` | seeded DB + score files through every read endpoint |
+| Frontend | `vitest` | store, composables, sorting, rendering helpers, analysis, sizing |
+| Frontend integration | `vitest` | full app mount against a contract-shaped fake API |
 
 ## Boundaries
 

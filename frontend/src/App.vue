@@ -1,71 +1,85 @@
 <template>
   <div class="app-shell" :class="{ embedded: isEmbedded }">
     <header class="topbar">
-      <div class="topbar-row1">
-        <h1 class="app-title">
-          <span class="title-flag">🇹🇼</span>
-          <span class="title-text">台股熱力圖</span>
-        </h1>
-        <div class="topbar-right">
-          <!-- 資料日期（非今日時顯示） -->
-          <span v-if="activeDate && activeDate !== todayStr" class="badge badge-date">
-            📅 {{ activeDate }}
-          </span>
-          <span v-if="!marketOpen" class="badge badge-closed">◼ 已收盤</span>
-          <span v-else class="badge badge-open">● 盤中</span>
-          <span class="last-updated mono">{{ formattedTime }}</span>
-          <ScoreProgress v-if="mode === 'buy_score' || mode === 'watchlist'" />
-          <ScoreRefreshBtn />
-          <TokenSettings />
-          <button
-            class="theme-toggle"
-            @click="themeStore.toggle()"
-            :aria-label="themeStore.theme === 'dark' ? '切換亮色模式' : '切換暗色模式'"
-            :title="themeStore.theme === 'dark' ? '亮色' : '暗色'"
-          >
-            <span v-if="themeStore.theme === 'dark'">☀</span>
-            <span v-else>🌙</span>
-          </button>
-        </div>
-      </div>
-      <div class="topbar-controls">
-        <ModeToggle
-          :mode="mode"
-          :grid-size="gridSize"
-          :mobile-density="mobileDensity"
-          :watch-count="watchItems.length"
-          @mode-change="onModeChange"
-          @grid-size-change="onGridSizeChange"
-          @density-change="onDensityChange"
-        />
+      <h1 class="brand">
+        <svg class="brand-mark" width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+          <rect x="1" y="1" width="9" height="12" rx="2.5" fill="var(--pct-up)" />
+          <rect x="12" y="1" width="9" height="7" rx="2.5" fill="var(--accent)" />
+          <rect x="1" y="15" width="9" height="6" rx="2.5" fill="var(--accent)" opacity="0.45" />
+          <rect x="12" y="10" width="9" height="11" rx="2.5" fill="var(--pct-down)" />
+        </svg>
+        <span class="brand-text">台股熱力圖</span>
+      </h1>
+
+      <AppNav
+        :mode="mode"
+        :heatmap-mode="heatmapMode"
+        :watch-count="watchItems.length"
+        @mode-change="onModeChange"
+      />
+
+      <GlobalSearch />
+
+      <div class="topbar-right">
+        <ScoreProgress v-if="showScoreStatus" />
+        <span class="market-status" :class="{ open: marketOpen }">
+          <i class="status-dot" />{{ marketOpen ? '盤中' : '已收盤' }}
+        </span>
+        <span class="data-time num" :title="`資料日期 ${activeDate}`">{{ timeLabel }}</span>
+        <ScoreRefreshBtn v-if="showScoreStatus" />
+        <button class="icon-btn guide-btn" title="使用說明" aria-label="使用說明" @click="ui.openGuide()">
+          <Icon name="help" />
+        </button>
+        <button class="icon-btn settings-btn" title="設定" aria-label="設定" @click="ui.openSettings()">
+          <Icon name="settings" />
+        </button>
+        <button
+          class="icon-btn theme-toggle"
+          :aria-label="themeStore.theme === 'dark' ? '切換亮色模式' : '切換暗色模式'"
+          :title="themeStore.theme === 'dark' ? '亮色' : '暗色'"
+          @click="themeStore.toggle()"
+        >
+          <Icon :name="themeStore.theme === 'dark' ? 'sun' : 'moon'" />
+        </button>
       </div>
     </header>
 
     <main class="main-content">
-      <EtfGrid v-if="mode === 'etf'" />
+      <OverviewView v-if="mode === 'overview'" />
+      <EtfGrid v-else-if="mode === 'etf'" />
       <WatchlistView v-else-if="mode === 'watchlist'" />
-      <HeatmapGrid v-else />
+      <HeatmapGrid v-else @mode-change="onModeChange" />
     </main>
+
+    <StockDrawer />
+    <GuideModal />
+    <SettingsModal />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useStockStore } from './stores/stockStore'
 import { useThemeStore } from './stores/themeStore'
 import { useWatchlistStore } from './stores/watchlistStore'
+import { useUiStore } from './stores/uiStore'
 import { useStockData } from './composables/useStockData'
 import { useWatchlistData } from './composables/useWatchlistData'
 import { useSignalsData } from './composables/useSignalsData'
 import { useEtfData } from './composables/useEtfData'
-import { fetchScores } from './composables/useScoreData'
-import { useBreakpoint } from './composables/useBreakpoint'
-import ModeToggle from './components/ModeToggle.vue'
+import { fetchScores, useScorePolling } from './composables/useScoreData'
+import { dataTimeLabel } from './utils/format'
+import AppNav from './components/AppNav.vue'
+import GlobalSearch from './components/GlobalSearch.vue'
+import Icon from './components/Icon.vue'
+import OverviewView from './components/OverviewView.vue'
 import HeatmapGrid from './components/HeatmapGrid.vue'
 import EtfGrid from './components/EtfGrid.vue'
 import WatchlistView from './components/WatchlistView.vue'
-import TokenSettings from './components/TokenSettings.vue'
+import StockDrawer from './components/StockDrawer.vue'
+import GuideModal from './components/GuideModal.vue'
+import SettingsModal from './components/SettingsModal.vue'
 import ScoreRefreshBtn from './components/ScoreRefreshBtn.vue'
 import ScoreProgress from './components/ScoreProgress.vue'
 
@@ -73,46 +87,33 @@ const isEmbedded = import.meta.env.VITE_EMBEDDED === 'true'
 
 const store = useStockStore()
 const themeStore = useThemeStore()
+const ui = useUiStore()
 const {
-  mode, gridSize, mobileDensity,
-  marketOpen, updatedAt, date: dataDate, etfDate, etfUpdatedAt,
+  mode, heatmapMode, marketOpen, updatedAt, date: dataDate, etfDate, etfUpdatedAt,
   scoresLoaded, scoresFetching,
 } = storeToRefs(store)
 const { items: watchItems } = storeToRefs(useWatchlistStore())
-const { isMobile } = useBreakpoint()
 
 useStockData()
 useEtfData()
 useWatchlistData()
 useSignalsData()
-onMounted(fetchScores)
+useScorePolling()
 
 function onModeChange(newMode) {
   store.setMode(newMode)
-  const needsScores = newMode === 'buy_score' || newMode === 'watchlist'
+  const needsScores = newMode === 'buy_score' || newMode === 'watchlist' || newMode === 'overview'
   if (needsScores && !scoresLoaded.value && !scoresFetching.value) {
     fetchScores()
   }
 }
 
-function onGridSizeChange(n) {
-  store.setGridSize(n)
-}
+const showScoreStatus = computed(() => ['overview', 'buy_score', 'watchlist'].includes(mode.value))
 
-function onDensityChange(d) {
-  store.setMobileDensity(d)
-}
+const activeDate = computed(() => (mode.value === 'etf' ? etfDate.value : dataDate.value))
+const activeUpdatedAt = computed(() => (mode.value === 'etf' ? etfUpdatedAt.value : updatedAt.value))
 
-
-const todayStr = new Date().toLocaleDateString('sv-SE')
-
-const activeDate = computed(() => mode.value === 'etf' ? etfDate.value : dataDate.value)
-const activeUpdatedAt = computed(() => mode.value === 'etf' ? etfUpdatedAt.value : updatedAt.value)
-
-const formattedTime = computed(() => {
-  if (!activeUpdatedAt.value) return '— : — : —'
-  return new Date(activeUpdatedAt.value).toLocaleTimeString('zh-TW', { hour12: false })
-})
+const timeLabel = computed(() => dataTimeLabel(activeDate.value, activeUpdatedAt.value))
 </script>
 
 <style scoped>
@@ -121,236 +122,92 @@ const formattedTime = computed(() => {
   flex-direction: column;
   height: 100vh;
   height: 100dvh;
-  background: transparent;
   color: var(--text-primary);
-  font-family: var(--font-sans);
 }
 
 .topbar {
   display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.55rem 1.5rem;
-  background: var(--topbar-bg);
-  border-bottom: 1px solid var(--topbar-border);
+  align-items: center;
+  gap: 12px;
   flex-shrink: 0;
-  backdrop-filter: blur(var(--topbar-blur, 8px));
-  -webkit-backdrop-filter: blur(var(--topbar-blur, 8px));
-  box-shadow: 0 1px 20px var(--topbar-shadow);
+  min-height: 52px;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-subtle);
   position: relative;
   z-index: 200;
 }
 
-.topbar-row1 {
+.brand {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  min-width: 0;
+  gap: 8px;
+  margin-right: 4px;
+  flex-shrink: 0;
 }
 
-.topbar-controls {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.app-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0;
-}
-
-.title-flag { font-size: 1.1rem; }
-
-.title-text {
-  font-size: 1.05rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  background: linear-gradient(90deg, var(--title-from) 0%, var(--title-mid) 50%, var(--title-to) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  filter: drop-shadow(0 0 6px var(--title-shadow));
-  position: relative;
+.brand-text {
+  font-size: 1rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 8px;
+  margin-left: auto;
   min-width: 0;
 }
 
-.badge {
-  font-size: 0.7rem;
-  padding: 0.18rem 0.55rem;
-  border-radius: 3px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-}
-
-.badge-open {
-  background: var(--badge-open-bg);
-  color: var(--badge-open-color);
-  border: 1px solid var(--badge-open-border);
-  animation: pulse-green 2s ease-in-out infinite;
-}
-
-.badge-closed {
-  background: var(--badge-closed-bg);
-  color: var(--badge-closed-color);
-  border: 1px solid var(--badge-closed-border);
-}
-
-.badge-date {
-  background: var(--badge-date-bg);
-  color: var(--badge-date-color);
-  border: 1px solid var(--badge-date-border);
-  font-size: 0.68rem;
-}
-
-@keyframes pulse-green {
-  0%, 100% { box-shadow: 0 0 6px var(--badge-open-border); }
-  50%       { box-shadow: 0 0 14px var(--badge-open-color); }
-}
-
-.last-updated {
-  font-size: 0.68rem;
-  color: var(--last-updated-color);
-  letter-spacing: 0.05em;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-}
-
-/* ── Theme toggle button ── */
-.theme-toggle {
-  background: var(--theme-toggle-bg);
-  border: 1px solid var(--theme-toggle-border);
-  color: var(--text-primary);
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  display: flex;
+.market-status {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: background 0.15s, border-color 0.15s;
-  padding: 0;
-  line-height: 1;
-  box-shadow: 0 8px 18px -12px var(--theme-toggle-shadow);
+  gap: 6px;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
+.market-status.open { color: var(--text-primary); font-weight: 500; }
 
-.theme-toggle:hover {
-  background: var(--theme-toggle-hover-bg);
-  border-color: var(--theme-toggle-hover-border);
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.market-status.open .status-dot { background: var(--pct-down); }
+
+.data-time {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .main-content {
   flex: 1;
-  padding: 0.9rem 1.2rem;
+  min-height: 0;
+  padding: 10px 14px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-.app-shell.embedded .topbar {
-  backdrop-filter: none;
-  box-shadow: none;
-  padding: 0.55rem 0.9rem;
+@media (max-width: 1100px) {
+  .brand-text { display: none; }
 }
 
-.app-shell.embedded .title-text {
-  font-size: 0.96rem;
-  filter: none;
+@media (max-width: 900px) {
+  .data-time { display: none; }
 }
 
-.app-shell.embedded .topbar-row1 {
-  gap: 0.9rem;
-}
-
-.app-shell.embedded .topbar-right {
-  gap: 0.45rem;
-}
-
-.app-shell.embedded .badge {
-  font-size: 0.64rem;
-  padding: 0.14rem 0.42rem;
-}
-
-.app-shell.embedded .main-content {
-  padding: 0.65rem 0.75rem;
-}
-
-@media (max-width: 1366px), (max-height: 768px) {
-  .topbar {
-    padding: 0.4rem 0.75rem;
-    gap: 0.25rem;
-  }
-
-  .topbar-row1 {
-    gap: 0.5rem;
-  }
-
-  .title-text {
-    font-size: 0.94rem;
-    letter-spacing: 0.05em;
-  }
-
-  .topbar-right {
-    gap: 0.4rem;
-  }
-
-  .badge {
-    font-size: 0.62rem;
-    padding: 0.12rem 0.4rem;
-  }
-
-  .last-updated {
-    font-size: 0.62rem;
-  }
-
+@media (max-width: 768px) {
+  .topbar { gap: 6px; padding: 6px 8px; min-height: 46px; }
+  .brand { margin-right: 0; }
+  .topbar-right { gap: 0; flex-shrink: 0; }
+  .market-status { font-size: 0; gap: 0; }
   .main-content {
-    padding: 0.55rem 0.65rem;
-  }
-}
-
-/* ── 手機直屏（≤640px）：topbar 標題列 + 控制列 ── */
-@media (max-width: 640px) {
-  .topbar {
-    padding: 0.35rem 0.6rem;
-    gap: 0.2rem;
-  }
-
-  .topbar-right {
-    gap: 0.3rem;
-  }
-
-  .title-text {
-    font-size: 0.82rem;
-    letter-spacing: 0.03em;
-  }
-
-  .badge {
-    font-size: 0.6rem;
-    padding: 0.1rem 0.32rem;
-  }
-
-  .last-updated {
-    display: none;
-  }
-
-  .main-content {
-    padding: 0.3rem 0.35rem;
-  }
-
-  .theme-toggle {
-    width: 24px;
-    height: 24px;
-    font-size: 0.75rem;
+    padding: 6px 6px calc(64px + env(safe-area-inset-bottom));
   }
 }
 </style>

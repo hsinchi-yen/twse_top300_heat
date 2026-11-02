@@ -77,7 +77,7 @@ describe('scoreChips', () => {
 
   it('adds uptrend chip when fundamentals_uptrend', () => {
     const chip = scoreChips(rich({ fundamentals_uptrend: true })).find(c => c.key === 'uptrend')
-    expect(chip.icon).toBe('✅')
+    expect(chip.icon).toBe('轉')
     expect(chip.text).toBe('轉強')
   })
 

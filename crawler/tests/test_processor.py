@@ -60,10 +60,21 @@ class TestMergeAndRank:
         expected = round(2590000 / 25900000000 * 100, 4)
         assert stock["turnover_rate"] == pytest.approx(expected, rel=1e-4)
 
-    def test_turnover_rate_zero_when_no_issue_shares(self, twse):
+    def test_turnover_rate_is_none_when_issue_shares_unknown(self, twse):
+        """Unknown is not zero: a traded stock with no share count has no rate."""
         result = merge_and_rank(twse, [], {})
         for r in result:
-            assert r["turnover_rate"] == 0.0
+            assert r["turnover_rate"] is None
+
+    def test_unknown_turnover_ranks_after_every_known_one(self, issue_shares):
+        twse = [
+            {"stock_id": "9999", "name": "無股本", "volume": 9_000_000, "price_change_pct": 0.0},
+            {"stock_id": "2330", "name": "台積電", "volume": 1_000, "price_change_pct": 0.0},
+        ]
+        result = {r["stock_id"]: r for r in merge_and_rank(twse, [], issue_shares)}
+        assert result["2330"]["turnover_rank"] == 1
+        assert result["9999"]["turnover_rank"] == 2
+        assert result["9999"]["volume_rank"] == 1
 
     def test_color_tier_deep_red_above_5pct(self, issue_shares):
         twse = [{"stock_id": "2330", "name": "台積電", "volume": 1000, "price_change_pct": 7.0}]

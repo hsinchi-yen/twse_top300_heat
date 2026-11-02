@@ -1,611 +1,182 @@
-/* tokens.css — Design tokens for Twse_Top100_Heat
- * Dark mode = :root defaults (current neon palette preserved exactly)
- * Light mode = html[data-theme="light"] (Apple metallic daylight)
+/* tokens.css — design tokens. Dark is the default; light overrides the same names.
+ *
+ * One accent. Colour carries meaning only:
+ *   red = up / green = down (Taiwan convention), gold → purple = buy-score signal,
+ *   amber = caution. Everything else is neutral.
+ * Series colours are validated for CVD separation against these surfaces.
  */
 
 :root {
-  --font-sans: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Inter", "Noto Sans TC", "Segoe UI", sans-serif;
-  /* Numbers: proportional sans + tabular-nums reads better than monospace in mixed CJK cards */
-  --font-num: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Noto Sans TC", sans-serif;
+  color-scheme: dark;
 
-  /* ── Layout ── */
-  --app-bg: #050810;
-  --surface: #0a1420;
-  --surface-raised: #0d1928;
-  --app-bg-image:
-    radial-gradient(var(--border-subtle) 1px, transparent 1px);
-  --app-bg-size: 28px 28px;
-  --app-bg-attachment: scroll;
+  --font-sans: "Inter", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", -apple-system,
+    BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 
-  /* ── Typography ── */
-  --text-primary: #c8d8e8;
-  --text-secondary: rgba(180,210,240,0.55);
-  --text-mono: rgba(160,210,240,0.55);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
 
-  /* ── Accents ── */
-  --accent: #00e5ff;
-  --accent-etf: #ffb300;
-  --accent-score: #69ff47;
+  /* ── Surfaces ── */
+  --app-bg: #0b0d11;
+  --surface: #14171e;
+  --surface-raised: #1b1f28;
+  --surface-sunken: #0f1116;
+  --hover-wash: rgba(255,255,255,0.05);
+  --scrim: rgba(5,7,10,0.62);
 
-  /* ── Borders ── */
-  --border-subtle: rgba(0,229,255,0.08);
-  --border-default: rgba(0,229,255,0.18);
-  --border-strong: rgba(0,229,255,0.35);
+  /* ── Lines ── */
+  --border-subtle: rgba(255,255,255,0.06);
+  --border-default: rgba(255,255,255,0.1);
+  --border-strong: rgba(255,255,255,0.2);
 
-  /* ── Topbar ── */
-  --topbar-bg: rgba(5,8,16,0.94);
-  --topbar-border: rgba(0,229,255,0.18);
-  --topbar-shadow: rgba(0,229,255,0.08);
-  --topbar-blur: 0px;
+  /* ── Ink ── */
+  --text-primary: #eceef2;
+  --text-secondary: #a8afbd;
+  --text-muted: #7b8394;
 
-  /* ── Title gradient stops ── */
-  --title-from: #00e5ff;
-  --title-mid: #7c4dff;
-  --title-to: #e040fb;
-  --title-shadow: rgba(0,229,255,0.4);
-  --title-gloss: rgba(255,255,255,0.0);
+  /* ── Accent ── */
+  --accent: #7aa7ff;
+  --accent-solid: #3f7bf0;
+  --accent-soft: rgba(122,167,255,0.14);
+  --on-accent: #ffffff;
 
-  /* ── Badges ── */
-  --badge-open-bg: rgba(0,230,120,0.1);
-  --badge-open-color: #00e676;
-  --badge-open-border: rgba(0,230,120,0.35);
-  --badge-closed-bg: rgba(255,60,60,0.08);
-  --badge-closed-color: #ff5555;
-  --badge-closed-border: rgba(255,60,60,0.25);
-  --badge-date-bg: rgba(124,77,255,0.1);
-  --badge-date-color: #bb86fc;
-  --badge-date-border: rgba(124,77,255,0.3);
-  --last-updated-color: rgba(0,229,255,0.28);
-
-  /* ── Price change ── */
+  /* ── Direction (Taiwan: red = up) ── */
   --pct-up: #ff6b6b;
-  --pct-up-shadow: rgba(255,80,80,0.55);
-  --pct-down: #00e676;
-  --pct-down-shadow: rgba(0,230,120,0.55);
-  --pct-flat: rgba(140,200,230,0.6);
+  --pct-down: #2fca8f;
+  --pct-flat: #a8afbd;
+  --up-soft: rgba(255,107,107,0.14);
+  --down-soft: rgba(47,202,143,0.14);
 
-  /* ── Scrollbar ── */
-  --scrollbar-from: #00e5ff;
-  --scrollbar-to: #7c4dff;
+  /* ── Caution ── */
+  --warn: #f0b24a;
+  --warn-soft: rgba(240,178,74,0.14);
 
-  /* ── Stock heat tiers ── */
-  --tier-dr-bg: #4a0a0a;
-  --tier-dr-glow: rgba(255,60,60,0.5);
-  --tier-dr-border: rgba(255,60,60,0.3);
+  /* ── Shadows ── */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-lg: 0 24px 64px rgba(0,0,0,0.55);
 
-  --tier-lr-bg: #3a1212;
-  --tier-lr-glow: rgba(255,100,100,0.3);
-  --tier-lr-border: rgba(255,100,100,0.2);
+  /* ── Heat tiers ── */
+  --tier-dr-bg: #562027;
+  --tier-dr-border: rgba(255,107,107,0.34);
+  --tier-lr-bg: #2f1b20;
+  --tier-lr-border: rgba(255,107,107,0.16);
+  --tier-nt-bg: #171a21;
+  --tier-nt-border: rgba(255,255,255,0.07);
+  --tier-lg-bg: #15281f;
+  --tier-lg-border: rgba(47,202,143,0.16);
+  --tier-dg-bg: #113c2c;
+  --tier-dg-border: rgba(47,202,143,0.34);
 
-  --tier-nt-bg: #0d1520;
-  --tier-nt-glow: rgba(0,229,255,0.15);
-  --tier-nt-border: rgba(0,229,255,0.1);
+  /* ── Buy-score signals (never red/green) ── */
+  --sig-strong_buy-bg: #2a2410;
+  --sig-strong_buy-border: rgba(245,200,90,0.42);
+  --sig-strong_buy-fg: #f5c85a;
+  --sig-buy-bg: #0e2a31;
+  --sig-buy-border: rgba(84,205,226,0.34);
+  --sig-buy-fg: #5fd0e4;
+  --sig-watch-bg: #171e2e;
+  --sig-watch-border: rgba(150,172,216,0.26);
+  --sig-watch-fg: #a5b8de;
+  --sig-neutral-bg: #15181f;
+  --sig-neutral-border: rgba(255,255,255,0.08);
+  --sig-neutral-fg: #a8afbd;
+  --sig-avoid-bg: #251330;
+  --sig-avoid-border: rgba(196,132,222,0.36);
+  --sig-avoid-fg: #cf9be6;
+  --sig-avoid-stripe: rgba(196,132,222,0.07);
 
-  --tier-lg-bg: #0a2a1a;
-  --tier-lg-glow: rgba(0,230,120,0.3);
-  --tier-lg-border: rgba(0,230,120,0.2);
+  /* ── Chips ── */
+  --chip-bg: rgba(255,255,255,0.08);
+  --chip-fg: #cdd2dc;
+  --chip-good-fg: #f5c85a;
+  --chip-soft-fg: #d8bd7c;
+  --chip-warn-fg: #f0b24a;
+  --chip-warn-bg: rgba(240,178,74,0.16);
 
-  --tier-dg-bg: #062015;
-  --tier-dg-glow: rgba(0,200,100,0.5);
-  --tier-dg-border: rgba(0,200,100,0.3);
-
-  /* ── ETF heat tiers ── */
-  --etf-dr-bg: #4a1a00;
-  --etf-dr-glow: rgba(255,120,0,0.5);
-  --etf-dr-border: rgba(255,120,0,0.32);
-
-  --etf-lr-bg: #2e1800;
-  --etf-lr-glow: rgba(255,165,0,0.3);
-  --etf-lr-border: rgba(255,165,0,0.22);
-
-  --etf-nt-bg: #111008;
-  --etf-nt-glow: rgba(255,193,7,0.15);
-  --etf-nt-border: rgba(255,179,0,0.12);
-
-  --etf-lg-bg: #0a2000;
-  --etf-lg-glow: rgba(0,230,120,0.3);
-  --etf-lg-border: rgba(0,230,120,0.2);
-
-  --etf-dg-bg: #052015;
-  --etf-dg-glow: rgba(0,200,100,0.5);
-  --etf-dg-border: rgba(0,200,100,0.32);
-
-  /* ── Sector block ── */
-  --sector-bg: rgba(255,255,255,0.03);
-  --sector-border: rgba(255,255,255,0.08);
-  --sector-name-color: rgba(0,229,255,0.75);
-  --sector-count-color: rgba(200,220,240,0.42);
-
-  /* ── Cell chrome ── */
-  --cell-rank-color: #00e5ff;
-  --cell-rank-shadow: rgba(0,229,255,0.55);
-  --cell-sector-color: rgba(180,220,255,0.72);
-  --cell-sector-bg: rgba(0,229,255,0.06);
-  --cell-sector-border: rgba(0,229,255,0.1);
-  --cell-code-color: rgba(160,210,240,0.72);
-  --cell-price-color: rgba(200,230,255,0.88);
-  --cell-name-color: #e8f4ff;
-  --cell-name-shadow: rgba(200,230,255,0.25);
-  --cell-score-color: rgba(160,210,240,0.78);
-  --cell-value-color: rgba(160,210,240,0.8);
-  --cell-border-default: rgba(0,229,255,0.1);
-  --cell-hover-border: rgba(0,229,255,0.5);
-  --cell-hover-sweep: rgba(0,229,255,0.07);
-  --cell-empty-bg: rgba(0,255,255,0.02);
-  --cell-empty-border: rgba(0,255,255,0.08);
-  --cell-scanline: rgba(0, 0, 0, 0.08);
-  --cell-idle-ring: color-mix(in srgb, var(--accent) 8%, transparent);
-  --cell-highlight-ring: color-mix(in srgb, var(--accent) 80%, transparent);
-  --cell-bar-track: rgba(255,255,255,0.08);
-
-  /* ── Buy-score signals (avoid red/green: Taiwan red = up, green = down) ── */
-  --sig-badge-bg: rgba(0,0,0,0.25);
-  --sig-strong_buy-bg: #2e2508;
-  --sig-strong_buy-border: rgba(255,200,60,0.55);
-  --sig-strong_buy-fg: #ffd54f;
-  --sig-strong_buy-glow: rgba(255,200,60,0.35);
-  --sig-buy-bg: #062a33;
-  --sig-buy-border: rgba(0,229,255,0.4);
-  --sig-buy-fg: #4dd0e1;
-  --sig-watch-bg: #121b2e;
-  --sig-watch-border: rgba(120,150,210,0.32);
-  --sig-watch-fg: #9fb4dc;
-  --sig-neutral-bg: #0e1218;
-  --sig-neutral-border: rgba(140,150,170,0.16);
-  --sig-neutral-fg: rgba(175,185,200,0.78);
-  --sig-avoid-bg: #1f0e28;
-  --sig-avoid-border: rgba(186,104,200,0.45);
-  --sig-avoid-fg: #ce93d8;
-  --sig-avoid-stripe: rgba(186,104,200,0.08);
-
-  /* ── Indicator chips ── */
-  --chip-bg: rgba(255,255,255,0.07);
-  --chip-fg: rgba(210,225,240,0.85);
-  --chip-good-fg: #ffd54f;
-  --chip-soft-fg: rgba(255,213,79,0.7);
-  --chip-warn-fg: #ffb74d;
-  --chip-warn-bg: rgba(255,152,0,0.14);
-
-  /* ── ETF cell chrome ── */
-  --etf-cell-rank-color: #ffb300;
-  --etf-cell-rank-shadow: rgba(255,179,0,0.55);
-  --etf-cell-scale-color: rgba(255,200,80,0.55);
-  --etf-cell-code-color: rgba(255,210,120,0.4);
-  --etf-cell-price-color: rgba(255,220,160,0.6);
-  --etf-cell-name-color: #fff3e0;
-  --etf-cell-name-shadow: rgba(255,179,0,0.2);
-  --etf-cell-turnover-color: rgba(255,210,100,0.7);
-  --etf-cell-portfolio-color: rgba(255,190,70,0.45);
-  --etf-cell-border-default: rgba(255,179,0,0.12);
-  --etf-cell-hover-border: rgba(255,179,0,0.55);
-  --etf-cell-hover-sweep: rgba(255,179,0,0.07);
-  --etf-cell-empty-bg: rgba(255,179,0,0.02);
-  --etf-cell-empty-border: rgba(255,179,0,0.08);
-  --etf-cell-scanline: rgba(0, 0, 0, 0.08);
-  --etf-cell-idle-ring: rgba(255,179,0,0.08);
-  --etf-tooltip-bg: rgba(12,9,2,0.96);
-  --etf-tooltip-border: rgba(255,179,0,0.35);
-  --etf-tooltip-shadow: rgba(255,179,0,0.12);
-  --etf-tooltip-label: rgba(255,179,0,0.55);
-  --etf-tooltip-val: #ffd54f;
-
-  /* ── Controls (HeatmapGrid / EtfGrid UI chrome) ── */
-  --ctrl-page-btn-bg: rgba(0,255,255,0.05);
-  --ctrl-page-btn-color: #00e5ff;
-  --ctrl-page-btn-border: rgba(0,255,255,0.3);
-  --ctrl-page-btn-hover-bg: rgba(0,255,255,0.15);
-  --ctrl-page-btn-hover-shadow: rgba(0,255,255,0.3);
-  --ctrl-dot-bg: rgba(0,255,255,0.05);
-  --ctrl-dot-border: rgba(0,255,255,0.2);
-  --ctrl-dot-color: rgba(160,200,230,0.6);
-  --ctrl-dot-hover-bg: rgba(0,255,255,0.12);
-  --ctrl-dot-hover-color: #00e5ff;
-  --ctrl-dot-active-bg: rgba(0,229,255,0.15);
-  --ctrl-dot-active-border: #00e5ff;
-  --ctrl-dot-active-color: #00e5ff;
-  --ctrl-dot-active-shadow: rgba(0,229,255,0.4);
-  --ctrl-page-info-color: rgba(160,200,230,0.7);
-  --ctrl-jump-bg: #0a1520;
-  --ctrl-jump-color: #00e5ff;
-  --ctrl-jump-border: rgba(0,229,255,0.3);
-  --ctrl-search-bg: #0a1520;
-  --ctrl-search-border: rgba(0,229,255,0.25);
-  --ctrl-search-color: #a0d2f0;
-  --ctrl-search-placeholder: rgba(0,229,255,0.25);
-  --ctrl-search-focus-border: #00e5ff;
-  --ctrl-search-focus-shadow: rgba(0,229,255,0.3);
-  --ctrl-error-color: #ff4444;
-  --ctrl-state-color: #444;
-  --ctrl-loading-dot: #00e5ff;
-  --toggle-btn-muted-bg: var(--border-subtle);
-  --toggle-btn-muted-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  --toggle-btn-hover-bg: color-mix(in srgb, var(--accent) 8%, transparent);
-  --toggle-btn-hover-shadow: color-mix(in srgb, var(--accent) 15%, transparent);
-  --toggle-btn-active-bg: color-mix(in srgb, var(--accent) 12%, transparent);
-  --toggle-btn-active-shadow: color-mix(in srgb, var(--accent) 35%, transparent);
-  --size-btn-muted-color: color-mix(in srgb, var(--accent) 38%, transparent);
-  --size-btn-hover-bg: color-mix(in srgb, var(--accent) 10%, transparent);
-  --size-btn-active-bg: color-mix(in srgb, var(--accent) 16%, transparent);
-  --size-btn-active-shadow: color-mix(in srgb, var(--accent) 25%, transparent);
-
-  /* ── ETF controls ── */
-  --etf-ctrl-page-btn-bg: rgba(255,179,0,0.05);
-  --etf-ctrl-page-btn-color: #ffb300;
-  --etf-ctrl-page-btn-border: rgba(255,179,0,0.3);
-  --etf-ctrl-page-btn-hover-bg: rgba(255,179,0,0.14);
-  --etf-ctrl-page-btn-hover-shadow: rgba(255,179,0,0.3);
-  --etf-ctrl-dot-bg: rgba(255,179,0,0.05);
-  --etf-ctrl-dot-border: rgba(255,179,0,0.2);
-  --etf-ctrl-dot-hover-bg: rgba(255,179,0,0.12);
-  --etf-ctrl-dot-hover-color: #ffb300;
-  --etf-ctrl-dot-active-bg: rgba(255,179,0,0.15);
-  --etf-ctrl-dot-active-border: #ffb300;
-  --etf-ctrl-dot-active-color: #ffb300;
-  --etf-ctrl-dot-active-shadow: rgba(255,179,0,0.4);
-  --etf-ctrl-page-info-color: #554400;
-  --etf-ctrl-jump-bg: #120c00;
-  --etf-ctrl-jump-color: #ffb300;
-  --etf-ctrl-jump-border: rgba(255,179,0,0.3);
-  --etf-ctrl-search-bg: #120c00;
-  --etf-ctrl-search-border: rgba(255,179,0,0.25);
-  --etf-ctrl-search-color: rgba(255,220,160,0.8);
-  --etf-ctrl-search-placeholder: rgba(255,179,0,0.25);
-  --etf-ctrl-search-focus-border: #ffb300;
-  --etf-ctrl-search-focus-shadow: rgba(255,179,0,0.3);
-  --etf-ctrl-error-color: #ff8c42;
-  --etf-ctrl-state-color: #554400;
-  --etf-ctrl-loading-dot: #ffb300;
-  --etf-sort-toggle-bg: rgba(255,179,0,0.04);
-  --etf-sort-toggle-border: rgba(255,179,0,0.15);
-  --etf-sort-btn-color: rgba(255,179,0,0.4);
-  --etf-sort-btn-hover-bg: rgba(255,179,0,0.1);
-  --etf-sort-btn-active-bg: rgba(255,179,0,0.18);
-  --etf-sort-btn-active-shadow: rgba(255,179,0,0.25);
-  --etf-info-trigger-color: rgba(255,179,0,0.45);
-  --etf-info-trigger-border: rgba(255,179,0,0.25);
-  --toggle-etf-muted-color: color-mix(in srgb, var(--accent-etf) 45%, transparent);
-  --toggle-etf-muted-bg: color-mix(in srgb, var(--accent-etf) 4%, transparent);
-  --toggle-etf-hover-bg: color-mix(in srgb, var(--accent-etf) 8%, transparent);
-  --toggle-etf-hover-shadow: color-mix(in srgb, var(--accent-etf) 18%, transparent);
-  --toggle-etf-active-bg: color-mix(in srgb, var(--accent-etf) 12%, transparent);
-  --toggle-etf-active-shadow: color-mix(in srgb, var(--accent-etf) 38%, transparent);
-  --toggle-score-muted-color: color-mix(in srgb, var(--accent-score) 45%, transparent);
-  --toggle-score-muted-bg: color-mix(in srgb, var(--accent-score) 4%, transparent);
-  --toggle-score-hover-bg: color-mix(in srgb, var(--accent-score) 8%, transparent);
-  --toggle-score-hover-shadow: color-mix(in srgb, var(--accent-score) 18%, transparent);
-  --toggle-score-active-bg: color-mix(in srgb, var(--accent-score) 12%, transparent);
-  --toggle-score-active-shadow: color-mix(in srgb, var(--accent-score) 38%, transparent);
-  --tablet-size-btn-muted-color: color-mix(in srgb, var(--accent-etf) 38%, transparent);
-  --tablet-size-btn-hover-bg: color-mix(in srgb, var(--accent-etf) 10%, transparent);
-  --tablet-size-btn-active-bg: color-mix(in srgb, var(--accent-etf) 16%, transparent);
-  --tablet-size-btn-active-shadow: color-mix(in srgb, var(--accent-etf) 25%, transparent);
-
-  /* ── Token settings ── */
-  --token-btn-border: #444;
-  --token-btn-color: #888;
-  --token-set-color: #4caf8a;
-  --token-panel-bg: #1e1e1e;
-  --token-panel-border: #444;
-  --token-title-color: #aaa;
-  --token-input-bg: #111;
-  --token-input-border: #555;
-  --token-input-color: #ddd;
-  --token-save-bg: #2a4a3a;
-  --token-save-color: #4caf8a;
-  --token-clear-bg: #3a2a2a;
-  --token-clear-color: #cf6679;
-  --token-panel-shadow: 0 4px 16px rgba(0,0,0,0.5);
-  --theme-toggle-bg: rgba(255,255,255,0.02);
-  --theme-toggle-border: var(--border-default);
-  --theme-toggle-shadow: rgba(0,0,0,0);
-  --theme-toggle-hover-bg: rgba(255,255,255,0.06);
-  --theme-toggle-hover-border: var(--border-strong);
+  /* ── Charts ── */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --chart-grid: #262a33;
+  --chart-axis: #3a3f4b;
+  --chart-neutral: #5d6575;
 }
 
-/* ═══════════════════════════════════════════════════════
-   LIGHT MODE — Apple metallic daylight
-   ═══════════════════════════════════════════════════════ */
 html[data-theme="light"] {
-  /* ── Layout ── */
-  --app-bg: #edf1f6;
-  --surface: rgba(255,255,255,0.78);
-  --surface-raised: rgba(255,255,255,0.92);
-  --app-bg-image:
-    linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(255,255,255,0.0) 18%),
-    radial-gradient(circle at 18% 0%, rgba(115, 171, 255, 0.28) 0%, transparent 26%),
-    radial-gradient(circle at 85% 10%, rgba(164, 170, 255, 0.22) 0%, transparent 28%),
-    radial-gradient(circle at 50% 100%, rgba(255,255,255,0.92) 0%, transparent 34%),
-    linear-gradient(180deg, #f9fbff 0%, #eff3f8 42%, #eef2f7 100%);
-  --app-bg-size: auto;
-  --app-bg-attachment: fixed;
+  color-scheme: light;
 
-  /* ── Typography ── */
-  --text-primary: #10131a;
-  --text-secondary: rgba(45,52,66,0.72);
-  --text-mono: rgba(45,52,66,0.66);
+  --app-bg: #f3f4f6;
+  --surface: #ffffff;
+  --surface-raised: #f7f8fa;
+  --surface-sunken: #eceef2;
+  --hover-wash: rgba(16,24,40,0.05);
+  --scrim: rgba(17,20,28,0.42);
 
-  /* ── Accents ── */
-  --accent: #0a66db;
-  --accent-etf: #d78216;
-  --accent-score: #34c759;
+  --border-subtle: rgba(16,24,40,0.07);
+  --border-default: rgba(16,24,40,0.12);
+  --border-strong: rgba(16,24,40,0.24);
 
-  /* ── Borders ── */
-  --border-subtle: rgba(76,91,118,0.08);
-  --border-default: rgba(84,99,126,0.16);
-  --border-strong: rgba(10,102,219,0.34);
+  --text-primary: #12151c;
+  --text-secondary: #4b5363;
+  --text-muted: #667085;
 
-  /* ── Topbar (frosted glass) ── */
-  --topbar-bg: linear-gradient(180deg, rgba(255,255,255,0.88) 0%, rgba(248,250,255,0.76) 100%);
-  --topbar-border: rgba(92,108,137,0.14);
-  --topbar-shadow: rgba(93,104,125,0.12);
-  --topbar-blur: 22px;
+  --accent: #2563eb;
+  --accent-solid: #2563eb;
+  --accent-soft: rgba(37,99,235,0.1);
+  --on-accent: #ffffff;
 
-  /* ── Title gradient stops ── */
-  --title-from: #0a66db;
-  --title-mid: #5d73ff;
-  --title-to: #84b8ff;
-  --title-shadow: rgba(10,102,219,0.18);
-  --title-gloss: rgba(255,255,255,0.72);
+  --pct-up: #c9252f;
+  --pct-down: #0a7f57;
+  --pct-flat: #4b5363;
+  --up-soft: rgba(201,37,47,0.09);
+  --down-soft: rgba(10,127,87,0.09);
 
-  /* ── Badges ── */
-  --badge-open-bg: rgba(32, 201, 120, 0.12);
-  --badge-open-color: #1d7f4d;
-  --badge-open-border: rgba(32, 201, 120, 0.28);
-  --badge-closed-bg: rgba(219, 60, 58, 0.09);
-  --badge-closed-color: #b44540;
-  --badge-closed-border: rgba(219, 60, 58, 0.22);
-  --badge-date-bg: rgba(93, 115, 255, 0.09);
-  --badge-date-color: #4b5fe0;
-  --badge-date-border: rgba(93, 115, 255, 0.22);
-  --last-updated-color: rgba(38,45,58,0.52);
+  --warn: #a15c00;
+  --warn-soft: rgba(217,130,0,0.12);
 
-  /* ── Price change ── */
-  --pct-up: #b44842;
-  --pct-up-shadow: rgba(180,72,66,0.16);
-  --pct-down: #20714d;
-  --pct-down-shadow: rgba(32,113,77,0.15);
-  --pct-flat: rgba(65,72,86,0.6);
+  --shadow-sm: 0 1px 2px rgba(16,24,40,0.07);
+  --shadow-lg: 0 24px 64px rgba(16,24,40,0.2);
 
-  /* ── Scrollbar ── */
-  --scrollbar-from: #83aef1;
-  --scrollbar-to: #5d73ff;
+  --tier-dr-bg: #f9cfd1;
+  --tier-dr-border: rgba(201,37,47,0.3);
+  --tier-lr-bg: #fdeeee;
+  --tier-lr-border: rgba(201,37,47,0.14);
+  --tier-nt-bg: #ffffff;
+  --tier-nt-border: rgba(16,24,40,0.09);
+  --tier-lg-bg: #e8f6ef;
+  --tier-lg-border: rgba(10,127,87,0.14);
+  --tier-dg-bg: #c3ead6;
+  --tier-dg-border: rgba(10,127,87,0.3);
 
-  /* ── Stock heat tiers (pastel on white) ── */
-  --tier-dr-bg: rgba(255, 238, 236, 0.9);
-  --tier-dr-glow: rgba(180,72,66,0.08);
-  --tier-dr-border: rgba(180,72,66,0.24);
-
-  --tier-lr-bg: rgba(255, 245, 242, 0.92);
-  --tier-lr-glow: rgba(203,118,91,0.05);
-  --tier-lr-border: rgba(203,118,91,0.16);
-
-  --tier-nt-bg: rgba(250, 252, 255, 0.9);
-  --tier-nt-glow: rgba(10,102,219,0.04);
-  --tier-nt-border: rgba(101,116,145,0.14);
-
-  --tier-lg-bg: rgba(241, 251, 245, 0.92);
-  --tier-lg-glow: rgba(32,113,77,0.06);
-  --tier-lg-border: rgba(32,113,77,0.18);
-
-  --tier-dg-bg: rgba(232, 248, 238, 0.94);
-  --tier-dg-glow: rgba(32,113,77,0.08);
-  --tier-dg-border: rgba(32,113,77,0.24);
-
-  /* ── ETF heat tiers ── */
-  --etf-dr-bg: rgba(255, 243, 228, 0.92);
-  --etf-dr-glow: rgba(215,130,22,0.06);
-  --etf-dr-border: rgba(215,130,22,0.18);
-
-  --etf-lr-bg: rgba(255, 248, 235, 0.92);
-  --etf-lr-glow: rgba(215,130,22,0.05);
-  --etf-lr-border: rgba(215,130,22,0.14);
-
-  --etf-nt-bg: rgba(255, 252, 242, 0.94);
-  --etf-nt-glow: rgba(215,130,22,0.04);
-  --etf-nt-border: rgba(164,116,42,0.14);
-
-  --etf-lg-bg: rgba(241, 249, 238, 0.92);
-  --etf-lg-glow: rgba(32,113,77,0.06);
-  --etf-lg-border: rgba(32,113,77,0.16);
-
-  --etf-dg-bg: rgba(232, 244, 236, 0.94);
-  --etf-dg-glow: rgba(32,113,77,0.08);
-  --etf-dg-border: rgba(32,113,77,0.22);
-
-  /* ── Sector block ── */
-  --sector-bg: rgba(255,255,255,0.42);
-  --sector-border: rgba(90,102,128,0.08);
-  --sector-name-color: #285ea6;
-  --sector-count-color: rgba(57,65,80,0.54);
-
-  /* ── Cell chrome ── */
-  --cell-rank-color: #2c66ac;
-  --cell-rank-shadow: rgba(44,102,172,0.14);
-  --cell-sector-color: rgba(36,88,154,0.74);
-  --cell-sector-bg: rgba(36,88,154,0.07);
-  --cell-sector-border: rgba(36,88,154,0.14);
-  --cell-code-color: rgba(49,57,70,0.72);
-  --cell-price-color: rgba(16,19,26,0.82);
-  --cell-name-color: #151922;
-  --cell-name-shadow: rgba(255,255,255,0.45);
-  --cell-score-color: rgba(38,85,150,0.72);
-  --cell-value-color: rgba(31,38,52,0.78);
-  --cell-border-default: rgba(93,108,132,0.12);
-  --cell-hover-border: rgba(10,102,219,0.34);
-  --cell-hover-sweep: rgba(10,102,219,0.035);
-  --cell-empty-bg: rgba(255,255,255,0.34);
-  --cell-empty-border: rgba(93,108,132,0.1);
-  --cell-scanline: rgba(123, 138, 167, 0.03);
-  --cell-idle-ring: rgba(104, 128, 173, 0.10);
-  --cell-highlight-ring: rgba(10,102,219,0.22);
-  --cell-bar-track: rgba(30,40,60,0.1);
-
-  /* ── Buy-score signals ── */
-  --sig-badge-bg: rgba(255,255,255,0.7);
-  --sig-strong_buy-bg: rgba(255,244,214,0.95);
-  --sig-strong_buy-border: rgba(196,140,0,0.45);
-  --sig-strong_buy-fg: #8a6200;
-  --sig-strong_buy-glow: rgba(196,140,0,0.18);
-  --sig-buy-bg: rgba(226,247,251,0.95);
-  --sig-buy-border: rgba(0,131,160,0.35);
-  --sig-buy-fg: #00687f;
-  --sig-watch-bg: rgba(236,241,250,0.95);
-  --sig-watch-border: rgba(80,104,150,0.26);
+  --sig-strong_buy-bg: #fdf4d9;
+  --sig-strong_buy-border: rgba(150,105,0,0.32);
+  --sig-strong_buy-fg: #7c5a00;
+  --sig-buy-bg: #e4f6fa;
+  --sig-buy-border: rgba(0,110,135,0.28);
+  --sig-buy-fg: #00637a;
+  --sig-watch-bg: #eef2fa;
+  --sig-watch-border: rgba(61,86,132,0.22);
   --sig-watch-fg: #3d5684;
-  --sig-neutral-bg: rgba(246,247,249,0.92);
-  --sig-neutral-border: rgba(100,110,125,0.16);
-  --sig-neutral-fg: rgba(60,66,78,0.72);
-  --sig-avoid-bg: rgba(246,236,250,0.95);
-  --sig-avoid-border: rgba(142,68,173,0.35);
+  --sig-neutral-bg: #f5f6f8;
+  --sig-neutral-border: rgba(16,24,40,0.1);
+  --sig-neutral-fg: #4b5363;
+  --sig-avoid-bg: #f6eefa;
+  --sig-avoid-border: rgba(123,60,150,0.28);
   --sig-avoid-fg: #7b3c96;
-  --sig-avoid-stripe: rgba(142,68,173,0.07);
+  --sig-avoid-stripe: rgba(123,60,150,0.06);
 
-  /* ── Indicator chips ── */
-  --chip-bg: rgba(30,40,60,0.06);
-  --chip-fg: rgba(31,38,52,0.82);
-  --chip-good-fg: #8a6200;
-  --chip-soft-fg: rgba(138,98,0,0.72);
-  --chip-warn-fg: #a65400;
-  --chip-warn-bg: rgba(230,120,0,0.1);
+  --chip-bg: rgba(16,24,40,0.06);
+  --chip-fg: #343b4a;
+  --chip-good-fg: #7c5a00;
+  --chip-soft-fg: #8c6d1f;
+  --chip-warn-fg: #9a5200;
+  --chip-warn-bg: rgba(217,130,0,0.12);
 
-  /* ── ETF cell chrome ── */
-  --etf-cell-rank-color: #c47a18;
-  --etf-cell-rank-shadow: rgba(196,122,24,0.14);
-  --etf-cell-scale-color: rgba(142,88,22,0.74);
-  --etf-cell-code-color: rgba(97,72,36,0.62);
-  --etf-cell-price-color: rgba(79,60,32,0.76);
-  --etf-cell-name-color: #171a20;
-  --etf-cell-name-shadow: rgba(255,255,255,0.4);
-  --etf-cell-turnover-color: rgba(141,84,15,0.78);
-  --etf-cell-portfolio-color: rgba(110,82,36,0.66);
-  --etf-cell-border-default: rgba(182,123,46,0.14);
-  --etf-cell-hover-border: rgba(215,130,22,0.34);
-  --etf-cell-hover-sweep: rgba(215,130,22,0.04);
-  --etf-cell-empty-bg: rgba(255,255,255,0.3);
-  --etf-cell-empty-border: rgba(182,123,46,0.1);
-  --etf-cell-scanline: rgba(147, 133, 110, 0.03);
-  --etf-cell-idle-ring: rgba(182,123,46,0.1);
-  --etf-tooltip-bg: rgba(255,255,255,0.88);
-  --etf-tooltip-border: rgba(182,123,46,0.18);
-  --etf-tooltip-shadow: rgba(108,83,44,0.08);
-  --etf-tooltip-label: rgba(125,86,31,0.76);
-  --etf-tooltip-val: #8c5511;
-
-  /* ── Controls ── */
-  --ctrl-page-btn-bg: rgba(255,255,255,0.5);
-  --ctrl-page-btn-color: #205ca8;
-  --ctrl-page-btn-border: rgba(92,108,137,0.18);
-  --ctrl-page-btn-hover-bg: rgba(255,255,255,0.72);
-  --ctrl-page-btn-hover-shadow: rgba(64,91,132,0.14);
-  --ctrl-dot-bg: rgba(255,255,255,0.46);
-  --ctrl-dot-border: rgba(92,108,137,0.18);
-  --ctrl-dot-color: rgba(56,64,77,0.62);
-  --ctrl-dot-hover-bg: rgba(255,255,255,0.7);
-  --ctrl-dot-hover-color: #205ca8;
-  --ctrl-dot-active-bg: rgba(10,102,219,0.12);
-  --ctrl-dot-active-border: #205ca8;
-  --ctrl-dot-active-color: #205ca8;
-  --ctrl-dot-active-shadow: rgba(64,91,132,0.16);
-  --ctrl-page-info-color: rgba(46,53,66,0.72);
-  --ctrl-jump-bg: rgba(255,255,255,0.72);
-  --ctrl-jump-color: #205ca8;
-  --ctrl-jump-border: rgba(92,108,137,0.18);
-  --ctrl-search-bg: rgba(255,255,255,0.78);
-  --ctrl-search-border: rgba(92,108,137,0.16);
-  --ctrl-search-color: #151922;
-  --ctrl-search-placeholder: rgba(56,64,77,0.42);
-  --ctrl-search-focus-border: #205ca8;
-  --ctrl-search-focus-shadow: rgba(64,91,132,0.14);
-  --ctrl-error-color: #b44540;
-  --ctrl-state-color: rgba(56,64,77,0.68);
-  --ctrl-loading-dot: #205ca8;
-  --toggle-btn-muted-bg: rgba(255,255,255,0.58);
-  --toggle-btn-muted-color: rgba(33,77,141,0.74);
-  --toggle-btn-hover-bg: rgba(255,255,255,0.78);
-  --toggle-btn-hover-shadow: rgba(60,89,131,0.14);
-  --toggle-btn-active-bg: linear-gradient(180deg, rgba(233,243,255,0.94) 0%, rgba(220,234,252,0.92) 100%);
-  --toggle-btn-active-shadow: rgba(84,124,177,0.2);
-  --size-btn-muted-color: rgba(42,79,133,0.72);
-  --size-btn-hover-bg: rgba(255,255,255,0.78);
-  --size-btn-active-bg: rgba(10,102,219,0.11);
-  --size-btn-active-shadow: rgba(84,124,177,0.18);
-
-  /* ── ETF controls ── */
-  --etf-ctrl-page-btn-bg: rgba(255,255,255,0.5);
-  --etf-ctrl-page-btn-color: #ba6e0d;
-  --etf-ctrl-page-btn-border: rgba(182,123,46,0.2);
-  --etf-ctrl-page-btn-hover-bg: rgba(255,255,255,0.74);
-  --etf-ctrl-page-btn-hover-shadow: rgba(140,97,38,0.14);
-  --etf-ctrl-dot-bg: rgba(255,255,255,0.46);
-  --etf-ctrl-dot-border: rgba(182,123,46,0.18);
-  --etf-ctrl-dot-hover-bg: rgba(255,255,255,0.7);
-  --etf-ctrl-dot-hover-color: #ba6e0d;
-  --etf-ctrl-dot-active-bg: rgba(215,130,22,0.12);
-  --etf-ctrl-dot-active-border: #ba6e0d;
-  --etf-ctrl-dot-active-color: #ba6e0d;
-  --etf-ctrl-dot-active-shadow: rgba(140,97,38,0.16);
-  --etf-ctrl-page-info-color: rgba(74,62,44,0.72);
-  --etf-ctrl-jump-bg: rgba(255,255,255,0.72);
-  --etf-ctrl-jump-color: #ba6e0d;
-  --etf-ctrl-jump-border: rgba(182,123,46,0.18);
-  --etf-ctrl-search-bg: rgba(255,255,255,0.78);
-  --etf-ctrl-search-border: rgba(182,123,46,0.16);
-  --etf-ctrl-search-color: #171a20;
-  --etf-ctrl-search-placeholder: rgba(74,62,44,0.38);
-  --etf-ctrl-search-focus-border: #ba6e0d;
-  --etf-ctrl-search-focus-shadow: rgba(182,123,46,0.14);
-  --etf-ctrl-error-color: #b44540;
-  --etf-ctrl-state-color: rgba(74,62,44,0.68);
-  --etf-ctrl-loading-dot: #ba6e0d;
-  --etf-sort-toggle-bg: rgba(255,255,255,0.58);
-  --etf-sort-toggle-border: rgba(182,123,46,0.18);
-  --etf-sort-btn-color: rgba(141,84,15,0.72);
-  --etf-sort-btn-hover-bg: rgba(255,255,255,0.78);
-  --etf-sort-btn-active-bg: rgba(215,130,22,0.12);
-  --etf-sort-btn-active-shadow: rgba(140,97,38,0.14);
-  --etf-info-trigger-color: rgba(141,84,15,0.72);
-  --etf-info-trigger-border: rgba(182,123,46,0.22);
-  --toggle-etf-muted-color: rgba(141,84,15,0.72);
-  --toggle-etf-muted-bg: rgba(255,255,255,0.58);
-  --toggle-etf-hover-bg: rgba(255,255,255,0.78);
-  --toggle-etf-hover-shadow: rgba(140,97,38,0.14);
-  --toggle-etf-active-bg: linear-gradient(180deg, rgba(255,247,236,0.96) 0%, rgba(255,241,224,0.92) 100%);
-  --toggle-etf-active-shadow: rgba(182,123,46,0.18);
-  --toggle-score-muted-color: rgba(38,120,77,0.74);
-  --toggle-score-muted-bg: rgba(255,255,255,0.58);
-  --toggle-score-hover-bg: rgba(255,255,255,0.78);
-  --toggle-score-hover-shadow: rgba(43,118,79,0.14);
-  --toggle-score-active-bg: linear-gradient(180deg, rgba(238,251,244,0.96) 0%, rgba(231,248,239,0.92) 100%);
-  --toggle-score-active-shadow: rgba(43,118,79,0.18);
-  --tablet-size-btn-muted-color: rgba(141,84,15,0.72);
-  --tablet-size-btn-hover-bg: rgba(255,255,255,0.78);
-  --tablet-size-btn-active-bg: rgba(215,130,22,0.12);
-  --tablet-size-btn-active-shadow: rgba(140,97,38,0.14);
-
-  /* ── Token settings ── */
-  --token-btn-border: rgba(92,108,137,0.18);
-  --token-btn-color: rgba(52,60,74,0.72);
-  --token-set-color: #34c759;
-  --token-panel-bg: rgba(255,255,255,0.92);
-  --token-panel-border: rgba(92,108,137,0.16);
-  --token-title-color: rgba(52,60,74,0.72);
-  --token-input-bg: rgba(247,249,253,0.92);
-  --token-input-border: rgba(92,108,137,0.14);
-  --token-input-color: #151922;
-  --token-save-bg: rgba(52,199,89,0.1);
-  --token-save-color: #1a8a3a;
-  --token-clear-bg: rgba(255,59,48,0.08);
-  --token-clear-color: #b44540;
-  --token-panel-shadow: 0 22px 50px rgba(66,78,100,0.14);
-  --theme-toggle-bg: rgba(255,255,255,0.52);
-  --theme-toggle-border: rgba(92,108,137,0.16);
-  --theme-toggle-shadow: rgba(76,91,118,0.1);
-  --theme-toggle-hover-bg: rgba(255,255,255,0.8);
-  --theme-toggle-hover-border: rgba(92,108,137,0.24);
-}
-
-/* ── Topbar frosted-glass (light mode only) ── */
-html[data-theme="light"] .topbar {
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --chart-grid: #e7e9ee;
+  --chart-axis: #c4c9d4;
+  --chart-neutral: #98a1b3;
 }

@@ -1,19 +1,33 @@
 <template>
   <div class="heatmap-container">
-    <FilterBar :matched="filteredCount" :total="poolCount" />
+    <FilterBar :matched="filteredCount" :total="poolCount">
+      <template #lead>
+        <div class="segmented sort-control" role="group" aria-label="排序">
+          <button
+            v-for="s in SORTS"
+            :id="`sort-${s.key}`"
+            :key="s.key"
+            class="segmented__item"
+            :class="{ active: mode === s.key }"
+            :aria-pressed="mode === s.key"
+            @click="emit('mode-change', s.key)"
+          >{{ s.label }}</button>
+        </div>
+      </template>
+      <template #trail>
+        <DensityControl />
+      </template>
+    </FilterBar>
 
-    <div v-if="loading" class="state-msg">
-      <span class="loading-dot">▋</span> 載入中…
-    </div>
-    <div v-else-if="error" class="state-msg error">⚠ {{ error }}</div>
+    <div v-if="loading && pool.length === 0" class="state-msg">載入中…</div>
+    <div v-else-if="error && pool.length === 0" class="state-msg error">無法取得行情：{{ error }}</div>
     <div v-else-if="allStocks.length === 0" class="state-msg">
-      {{ filters.active.length && poolCount
+      {{ (filters.active.length || filters.sector) && poolCount
         ? '目前沒有股票符合篩選條件'
         : mode === 'buy_score' && scoresFetching ? '計分中…' : '暫無資料' }}
     </div>
 
     <template v-else>
-      <!-- dynamic grid -->
       <div
         class="stock-grid"
         :style="gridStyle"
@@ -27,81 +41,31 @@
           :key="stock.stock_id"
           :stock="stock"
           :mode="mode"
-          :highlighted="stock.stock_id === highlightedStockId"
           :buy-score="scores[stock.stock_id] ?? null"
           :scores-loaded="scoresLoaded"
           :scores-fetching="scoresFetching"
           :daily="signals[stock.stock_id] ?? null"
           :market-open="marketOpen"
           pinnable
+          clickable
           :pinned="wl.isPinned(stock.stock_id)"
           @toggle-pin="wl.toggle"
+          @open="ui.openStock"
         />
         <!-- 末頁補空格維持格子排列 -->
-        <div
-          v-for="i in emptyCount"
-          :key="`empty-${i}`"
-          class="cell-empty"
-        />
+        <div v-for="i in emptyCount" :key="`empty-${i}`" />
       </div>
 
-      <!-- 換頁列 -->
-      <div class="pagination" :class="{ mobile: isMobile }">
-        <button class="page-btn" :disabled="page === 0" @click="prevPage">
-          {{ isMobile ? '‹' : '‹ 上一頁' }}
-        </button>
-
-        <!-- desktop/tablet: 頁碼點 -->
-        <div v-if="!isMobile" class="page-dots">
-          <button
-            v-for="p in totalPages"
-            :key="p"
-            class="dot"
-            :class="{ active: p - 1 === page }"
-            @click="page = p - 1"
-          >{{ p }}</button>
-        </div>
-
-        <!-- mobile: 跳頁下拉 -->
-        <select v-else class="page-jump" :value="page" @change="onJump">
-          <option v-for="p in totalPages" :key="p" :value="p - 1">
-            第 {{ p }} / {{ totalPages }} 頁
-          </option>
-        </select>
-
-        <span class="page-info">
-          <template v-if="!isMobile">
-            第 {{ page + 1 }} / {{ totalPages }} 頁
-            &nbsp;·&nbsp;
-            排名 {{ pageStart + 1 }}–{{ pageEnd }}（共 {{ allStocks.length }} 檔 / {{ cols }}×{{ rows }}）
-          </template>
-          <template v-else>
-            {{ pageStart + 1 }}–{{ pageEnd }} / {{ allStocks.length }}
-          </template>
-        </span>
-
-        <button class="page-btn" :disabled="page >= totalPages - 1" @click="nextPage">
-          {{ isMobile ? '›' : '下一頁 ›' }}
-        </button>
-
-        <button v-if="wl.error" class="pin-error" title="點擊關閉" @click="wl.clearError()">
-          ⚠ {{ wl.error }}
-        </button>
-
-        <div class="search-box">
-          <input
-            v-model="searchQuery"
-            type="text"
-            inputmode="numeric"
-            placeholder="輸入股號 Enter"
-            maxlength="6"
-            @keydown.enter="doSearch"
-            class="search-input"
-          />
-          <button v-if="searchQuery" class="search-clear" @click="clearSearch">×</button>
-          <p v-if="searchError" class="search-error">{{ searchError }}</p>
-        </div>
-      </div>
+      <Pager
+        :page="page"
+        :total="totalPages"
+        :start="pageStart"
+        :end="pageEnd"
+        :count="allStocks.length"
+        @update:page="page = $event"
+      >
+        <button v-if="wl.error" class="pin-error" title="點擊關閉" @click="wl.clearError()">{{ wl.error }}</button>
+      </Pager>
     </template>
   </div>
 </template>
@@ -112,26 +76,34 @@ import { storeToRefs } from 'pinia'
 import { useStockStore } from '../stores/stockStore'
 import { useWatchlistStore } from '../stores/watchlistStore'
 import { useFilterStore } from '../stores/filterStore'
+import { useUiStore } from '../stores/uiStore'
 import { useBreakpoint } from '../composables/useBreakpoint'
 import { MAX_STOCKS, MOBILE_DENSITY } from '../constants'
 import { applyFilters, sortByPotential } from '../utils/stockFilters'
 import StockCell from './StockCell.vue'
 import FilterBar from './FilterBar.vue'
+import DensityControl from './DensityControl.vue'
+import Pager from './Pager.vue'
+
+const SORTS = [
+  { key: 'turnover', label: '週轉率' },
+  { key: 'volume', label: '成交量' },
+  { key: 'buy_score', label: '買進評分' },
+]
+
+const emit = defineEmits(['mode-change'])
 
 const store = useStockStore()
 const {
-  sectors, loading, error, mode, gridSize, mobileDensity,
+  stockPool: pool, loading, error, mode, gridSize, mobileDensity,
   scores, scoresLoaded, scoresFetching, signals, marketOpen,
 } = storeToRefs(store)
 const wl = useWatchlistStore()
 const filters = useFilterStore()
+const ui = useUiStore()
 const { isMobile } = useBreakpoint()
 
 const page = ref(0)
-const searchQuery = ref('')
-const searchError = ref('')
-const highlightedStockId = ref('')
-let highlightTimer = null
 
 // ── grid geometry ──
 const cols = computed(() => {
@@ -145,30 +117,11 @@ const rows = computed(() => {
 const pageSize = computed(() => cols.value * rows.value)
 
 const gridStyle = computed(() => ({
-  gridTemplateColumns: `repeat(${cols.value}, 1fr)`,
-  gridTemplateRows:    `repeat(${rows.value}, 1fr)`,
+  gridTemplateColumns: `repeat(${cols.value}, minmax(0, 1fr))`,
+  gridTemplateRows:    `repeat(${rows.value}, minmax(0, 1fr))`,
 }))
 
-const stockLookup = computed(() => {
-  const m = {}
-  for (const sector of sectors.value) {
-    for (const s of sector.stocks ?? []) {
-      m[s.stock_id] = { ...s, sector: sector.name }
-    }
-  }
-  return m
-})
-
 // 同一批 600 檔（股票 API query 永遠不變），各模式只在前端重排 / 篩選
-const pool = computed(() => {
-  const flat = []
-  for (const sector of sectors.value) {
-    for (const stock of sector.stocks ?? []) {
-      flat.push({ ...stock, sector: sector.name })
-    }
-  }
-  return flat
-})
 const poolCount = computed(() => Math.min(pool.value.length, MAX_STOCKS))
 
 function sortForMode(flat) {
@@ -190,13 +143,14 @@ function sortForMode(flat) {
 }
 
 const allStocks = computed(() => {
+  const scope = filters.sector ? pool.value.filter(s => s.sector === filters.sector) : pool.value
   let list
   if (filters.active.length) {
     // 篩選中：先篩，再依潛力排序（pass_rate → 法人近5日）
     const data = { scores: scores.value, signals: signals.value, marketOpen: marketOpen.value }
-    list = sortByPotential(applyFilters(pool.value, filters.active, data), data)
+    list = sortByPotential(applyFilters(scope, filters.active, data), data)
   } else {
-    list = sortForMode(pool.value)
+    list = sortForMode(scope)
   }
   list = list.slice(0, MAX_STOCKS)
   // 評分模式的 # 是名次；成交量 / 週轉率保留原本的成交量排名
@@ -211,13 +165,14 @@ const pageEnd = computed(() => Math.min(pageStart.value + pageSize.value, allSto
 const pageStocks = computed(() => allStocks.value.slice(pageStart.value, pageEnd.value))
 const emptyCount = computed(() => pageSize.value - pageStocks.value.length)
 
-watch(allStocks, () => { page.value = 0 })
-watch(pageSize,  () => { page.value = 0 })
-watch(mode,      clearSearch)
+// Keep the page across polls (which replace the pool with fresh quotes); only a
+// change in what is being listed sends the reader back to the first page.
+watch([mode, () => filters.active, () => filters.sector], () => { page.value = 0 })
+watch(pageSize, () => { page.value = 0 })
+watch(totalPages, (n) => { if (page.value > n - 1) page.value = n - 1 })
 
 function prevPage() { if (page.value > 0) page.value-- }
 function nextPage() { if (page.value < totalPages.value - 1) page.value++ }
-function onJump(e)  { page.value = Number(e.target.value) }
 
 let touchStartX = null
 function onPointerDown(e) {
@@ -232,30 +187,6 @@ function onPointerUp(e) {
   if (dx < 0) nextPage()
   else prevPage()
 }
-
-function doSearch() {
-  const query = searchQuery.value.trim()
-  searchError.value = ''
-  highlightedStockId.value = ''
-  if (highlightTimer) { clearTimeout(highlightTimer); highlightTimer = null }
-  if (!query) return
-
-  const idx = allStocks.value.findIndex(s => s.stock_id === query)
-  if (idx === -1) {
-    searchError.value = `找不到 ${query}，不在 Top ${allStocks.value.length} 範圍內`
-    return
-  }
-  page.value = Math.floor(idx / pageSize.value)
-  highlightedStockId.value = query
-  highlightTimer = setTimeout(() => { highlightedStockId.value = '' }, 3000)
-}
-
-function clearSearch() {
-  searchQuery.value = ''
-  searchError.value = ''
-  highlightedStockId.value = ''
-  if (highlightTimer) { clearTimeout(highlightTimer); highlightTimer = null }
-}
 </script>
 
 <style scoped>
@@ -263,209 +194,23 @@ function clearSearch() {
   display: flex;
   flex-direction: column;
   height: 100%;
-  gap: 0.35rem;
+  gap: 8px;
   min-height: 0;
 }
 
 .stock-grid {
   flex: 1;
   display: grid;
-  gap: clamp(4px, 0.55vw, 8px);
+  gap: 6px;
   min-height: 0;
-}
-
-.stock-grid[data-size="4"] { gap: clamp(6px, 0.7vw, 12px); }
-.stock-grid[data-size="5"] { gap: clamp(5px, 0.6vw, 10px); }
-
-.cell-empty {
-  background: var(--cell-empty-bg);
-  border: 1px dashed var(--cell-empty-border);
-  border-radius: 6px;
-}
-
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-  padding: 0.2rem 0;
-}
-
-.page-btn {
-  background: var(--ctrl-page-btn-bg);
-  color: var(--ctrl-page-btn-color);
-  border: 1px solid var(--ctrl-page-btn-border);
-  border-radius: 4px;
-  padding: 0.3rem 0.9rem;
-  font-size: 0.78rem;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  cursor: pointer;
-  transition: all 0.15s;
-  letter-spacing: 0.05em;
-}
-
-.page-btn:hover:not(:disabled) {
-  background: var(--ctrl-page-btn-hover-bg);
-  border-color: var(--ctrl-page-btn-color);
-  box-shadow: 0 0 8px var(--ctrl-page-btn-hover-shadow);
-}
-
-.page-btn:disabled {
-  opacity: 0.25;
-  cursor: default;
-}
-
-.page-dots {
-  display: flex;
-  gap: 4px;
-}
-
-.dot {
-  width: 26px;
-  height: 26px;
-  border-radius: 3px;
-  background: var(--ctrl-dot-bg);
-  border: 1px solid var(--ctrl-dot-border);
-  color: var(--ctrl-dot-color);
-  font-size: 0.72rem;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s;
-}
-
-.dot:hover {
-  background: var(--ctrl-dot-hover-bg);
-  color: var(--ctrl-dot-hover-color);
-}
-
-.dot.active {
-  background: var(--ctrl-dot-active-bg);
-  border-color: var(--ctrl-dot-active-border);
-  color: var(--ctrl-dot-active-color);
-  font-weight: 700;
-  box-shadow: 0 0 8px var(--ctrl-dot-active-shadow);
-}
-
-.page-info {
-  font-size: 0.72rem;
-  color: var(--ctrl-page-info-color);
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
-}
-
-.page-jump {
-  background: var(--ctrl-jump-bg);
-  color: var(--ctrl-jump-color);
-  border: 1px solid var(--ctrl-jump-border);
-  border-radius: 4px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 0.8rem;
-  padding: 0.4rem 0.6rem;
-  min-height: 44px;
 }
 
 .pin-error {
   background: none;
   border: none;
-  color: var(--ctrl-error-color);
-  font-size: 0.75rem;
-  cursor: pointer;
+  color: var(--pct-up);
+  font-size: 0.8125rem;
   white-space: nowrap;
-}
-
-/* ── 搜尋框 ── */
-.search-box {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  margin-left: auto;
-}
-
-.search-input {
-  background: var(--ctrl-search-bg);
-  border: 1px solid var(--ctrl-search-border);
-  border-radius: 4px;
-  color: var(--ctrl-search-color);
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 0.78rem;
-  padding: 0.28rem 1.8rem 0.28rem 0.6rem;
-  width: 130px;
-  letter-spacing: 0.05em;
-  outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.search-input::placeholder {
-  color: var(--ctrl-search-placeholder);
-  font-size: 0.7rem;
-}
-
-.search-input:focus {
-  border-color: var(--ctrl-search-focus-border);
-  box-shadow: 0 0 8px var(--ctrl-search-focus-shadow);
-}
-
-.search-clear {
-  position: absolute;
-  right: 5px;
-  background: none;
-  border: none;
-  color: color-mix(in srgb, var(--accent) 40%, transparent);
-  font-size: 1rem;
-  cursor: pointer;
-  padding: 0 3px;
-  line-height: 1;
-  transition: color 0.15s;
-}
-
-.search-clear:hover { color: var(--accent); }
-
-.search-error {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: 3px;
-  font-size: 0.65rem;
-  color: var(--ctrl-error-color);
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: 10;
-}
-
-/* ── 狀態訊息 ── */
-.state-msg {
-  color: var(--ctrl-state-color);
-  font-size: 1rem;
-  text-align: center;
-  padding: 4rem;
-  flex: 1;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-}
-.state-msg.error { color: var(--ctrl-error-color); }
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0; }
-}
-.loading-dot {
-  animation: blink 1s step-start infinite;
-  color: var(--ctrl-loading-dot);
-}
-
-@media (max-width: 1366px), (max-height: 768px) {
-  .pagination { gap: 0.45rem; }
-  .page-btn   { padding: 0.2rem 0.6rem; font-size: 0.7rem; }
-  .dot        { width: 22px; height: 22px; font-size: 0.66rem; }
-  .page-info  { font-size: 0.66rem; }
-  .search-input { font-size: 0.7rem; width: 110px; padding: 0.22rem 1.6rem 0.22rem 0.5rem; }
-  .state-msg  { font-size: 0.88rem; padding: 2rem; }
 }
 
 /* ── 平板（769–1024px）：中等字體，介於手機與桌機之間（下限 0.7rem） ── */
@@ -473,48 +218,30 @@ function clearSearch() {
   .stock-grid :deep(.cell-name)     { font-size: clamp(0.9rem, 1.4vw, 1.1rem); }
   .stock-grid :deep(.cell-code)     { font-size: clamp(0.7rem, 0.85vw, 0.78rem); }
   .stock-grid :deep(.cell-price)    { font-size: clamp(0.75rem, 1.0vw, 0.9rem); }
-  .stock-grid :deep(.cell-rank)     { font-size: 0.7rem; }
-  .stock-grid :deep(.cell-sector)   { font-size: 0.7rem; }
   .stock-grid :deep(.cell-pct)      { font-size: clamp(0.8rem, 1.2vw, 1.0rem); }
   .stock-grid :deep(.cell-passrate) { font-size: clamp(1rem, 1.6vw, 1.2rem); }
 }
 
-/* ── 手機直屏：字體放大（覆蓋 StockCell 的 scoped 字體大小）── */
-
-/* 2x2 / 2x3：放大方便閱讀 */
+/* ── 手機：2x2 / 2x3 放大方便閱讀 ── */
 @media (max-width: 768px) {
-  .stock-grid:not([data-density="3x3"]) :deep(.cell-rank)   { font-size: 1.16rem; }
-  .stock-grid:not([data-density="3x3"]) :deep(.cell-sector) { font-size: 1.0rem;  }
-  .stock-grid:not([data-density="3x3"]) :deep(.cell-code)   { font-size: 1.24rem; }
-  .stock-grid:not([data-density="3x3"]) :deep(.cell-price)  { font-size: 1.36rem; }
-  .stock-grid:not([data-density="3x3"]) :deep(.cell-name)   { font-size: 1.45rem; }
-  .stock-grid:not([data-density="3x3"]) :deep(.cell-score)  { font-size: 1.16rem; }
+  .stock-grid:not([data-density="3x3"]) :deep(.cell-rank)   { font-size: 0.875rem; }
+  .stock-grid:not([data-density="3x3"]) :deep(.cell-sector) { font-size: 0.875rem; }
+  .stock-grid:not([data-density="3x3"]) :deep(.cell-code)   { font-size: 0.9375rem; }
+  .stock-grid:not([data-density="3x3"]) :deep(.cell-price)  { font-size: 1.125rem; }
+  .stock-grid:not([data-density="3x3"]) :deep(.cell-name)   { font-size: 1.3rem; }
+  .stock-grid:not([data-density="3x3"]) :deep(.cell-score)  { font-size: 0.9375rem; }
   .stock-grid:not([data-density="3x3"]) :deep(.cell-value),
-  .stock-grid:not([data-density="3x3"]) :deep(.cell-turnover) { font-size: 1.24rem; }
-  .stock-grid:not([data-density="3x3"]) :deep(.cell-pct)    { font-size: 1.56rem; }
-  .stock-grid:not([data-density="3x3"]) :deep(.cell-passrate) { font-size: 1.7rem; }
+  .stock-grid:not([data-density="3x3"]) :deep(.cell-turnover) { font-size: 1rem; }
+  .stock-grid:not([data-density="3x3"]) :deep(.cell-pct)    { font-size: 1.3rem; }
+  .stock-grid:not([data-density="3x3"]) :deep(.cell-passrate) { font-size: 1.5rem; }
   .stock-grid:not([data-density="3x3"]) :deep(.cell-signal),
-  .stock-grid:not([data-density="3x3"]) :deep(.chip)        { font-size: 1rem; }
-}
+  .stock-grid:not([data-density="3x3"]) :deep(.chip)        { font-size: 0.875rem; }
 
-/* 3x3：密度較高，適度放大即可 */
-@media (max-width: 768px) {
-  .stock-grid[data-density="3x3"] :deep(.cell-rank)   { font-size: 0.87rem; }
-  .stock-grid[data-density="3x3"] :deep(.cell-sector) { font-size: 0.75rem; }
-  .stock-grid[data-density="3x3"] :deep(.cell-code)   { font-size: 0.93rem; }
-  .stock-grid[data-density="3x3"] :deep(.cell-price)  { font-size: 1.02rem; }
-  .stock-grid[data-density="3x3"] :deep(.cell-name)   { font-size: 1.12rem; }
-  .stock-grid[data-density="3x3"] :deep(.cell-score)  { font-size: 0.87rem; }
-  .stock-grid[data-density="3x3"] :deep(.cell-value),
-  .stock-grid[data-density="3x3"] :deep(.cell-turnover) { font-size: 0.93rem; }
-  .stock-grid[data-density="3x3"] :deep(.cell-pct)    { font-size: 1.17rem; }
-  .stock-grid[data-density="3x3"] :deep(.cell-passrate) { font-size: 1.25rem; }
-  .stock-grid[data-density="3x3"] :deep(.cell-signal),
-  .stock-grid[data-density="3x3"] :deep(.chip)        { font-size: 0.8rem; }
-}
+  .stock-grid[data-density="3x3"] :deep(.cell-name)   { font-size: 1rem; }
+  .stock-grid[data-density="3x3"] :deep(.cell-pct)    { font-size: 1rem; }
+  .stock-grid[data-density="3x3"] :deep(.cell-passrate) { font-size: 1.1rem; }
 
-/* 名稱完整顯示：手機改為最多兩行換行 */
-@media (max-width: 768px) {
+  /* 名稱完整顯示：手機改為最多兩行換行 */
   .stock-grid :deep(.cell-name) {
     flex-wrap: wrap;
     align-content: center;
@@ -527,46 +254,6 @@ function clearSearch() {
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-  }
-}
-
-/* ── 真手機斷點：觸控導向佈局 ── */
-@media (max-width: 768px) {
-  .heatmap-container { gap: 0.5rem; }
-
-  .pagination.mobile {
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    padding: 0.3rem 0;
-  }
-
-  .pagination.mobile .page-btn {
-    min-width: 44px;
-    min-height: 44px;
-    font-size: 1.1rem;
-    padding: 0.3rem 0.7rem;
-  }
-
-  .pagination.mobile .page-info {
-    font-size: 0.72rem;
-    order: 4;
-    flex-basis: 100%;
-    text-align: center;
-  }
-
-  .pagination.mobile .search-box {
-    order: 5;
-    flex-basis: 100%;
-    margin-left: 0;
-    justify-content: center;
-  }
-
-  .pagination.mobile .search-input {
-    width: 100%;
-    max-width: 240px;
-    font-size: 0.85rem;
-    min-height: 40px;
-    padding: 0.4rem 1.8rem 0.4rem 0.7rem;
   }
 }
 </style>

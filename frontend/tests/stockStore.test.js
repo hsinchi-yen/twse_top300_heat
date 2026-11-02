@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useStockStore } from '../src/stores/stockStore'
 
@@ -101,9 +101,48 @@ describe('stockStore — buy score state', () => {
 })
 
 describe('stockStore — mode', () => {
-  it('defaults to turnover', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('defaults to overview', () => {
+    expect(useStockStore().mode).toBe('overview')
+  })
+
+  it('restores the last view', () => {
+    localStorage.setItem('view_mode', 'etf')
+    setActivePinia(createPinia())
+    expect(useStockStore().mode).toBe('etf')
+  })
+
+  it('ignores an unknown stored view', () => {
+    localStorage.setItem('view_mode', 'bogus')
+    setActivePinia(createPinia())
+    expect(useStockStore().mode).toBe('overview')
+  })
+
+  it('still works when storage throws', () => {
+    const read = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
+    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked') })
+    try {
+      setActivePinia(createPinia())
+      const store = useStockStore()
+      expect(store.mode).toBe('overview')
+      expect(store.mobileDensity).toBe('2x3')
+      store.setMode('volume')
+      store.setMobileDensity('2x2')
+      expect(store.mode).toBe('volume')
+      expect(store.mobileDensity).toBe('2x2')
+    } finally {
+      read.mockRestore()
+      write.mockRestore()
+    }
+  })
+
+  it('remembers the last heatmap sort separately from the view', () => {
     const store = useStockStore()
-    expect(store.mode).toBe('turnover')
+    expect(store.heatmapMode).toBe('turnover')
+    store.setMode('buy_score')
+    store.setMode('overview')
+    expect(store.heatmapMode).toBe('buy_score')
   })
 
   it('setMode accepts buy_score', () => {

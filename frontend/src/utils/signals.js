@@ -35,7 +35,7 @@ export function passRate(buyScore) {
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v)
 
 /**
- * Chips from the monthly buy-score summary.
+ * Chips from the nightly buy-score summary.
  * chip: {key, icon, text, title, tone, keepText}
  *   tone: 'good' | 'soft' | 'warn' | 'up' | 'down'
  *   keepText: text stays visible on compact cards (icon-only otherwise)
@@ -46,7 +46,7 @@ export function scoreChips(buyScore) {
 
   if (buyScore.fundamentals_uptrend === true) {
     chips.push({
-      key: 'uptrend', icon: '✅', text: '轉強', tone: 'good', keepText: false,
+      key: 'uptrend', icon: '轉', text: '轉強', tone: 'good', keepText: false,
       title: '近3月營收年增率轉正 + EPS YoY 3季中2季以上正成長',
     })
   }
@@ -55,12 +55,12 @@ export function scoreChips(buyScore) {
   if (pe && isNum(pe.current)) {
     if (isNum(pe.p25) && pe.current < pe.p25) {
       chips.push({
-        key: 'value', icon: '💲', text: '低估', tone: 'good', keepText: false,
+        key: 'value', icon: '估', text: '低估', tone: 'good', keepText: false,
         title: `P/E ${pe.current} < 近5年 25 分位 ${pe.p25}`,
       })
     } else if (isNum(pe.median) && pe.current < pe.median) {
       chips.push({
-        key: 'value', icon: '💲', text: '偏低', tone: 'soft', keepText: false,
+        key: 'value', icon: '估', text: '偏低', tone: 'soft', keepText: false,
         title: `P/E ${pe.current} < 近5年中位數 ${pe.median}`,
       })
     }
@@ -115,7 +115,7 @@ export function dailyChips(sig, stock, marketOpen) {
   if (sig.above_ma20 === true) {
     const both = sig.above_ma60 === true
     chips.push({
-      key: 'ma', icon: '📈', text: both ? '月季線上' : '月線上', tone: 'up', keepText: false,
+      key: 'ma', icon: '線', text: both ? '月季線上' : '月線上', tone: 'up', keepText: false,
       title: `收盤 ${sig.close} ／ MA20 ${sig.ma20}${isNum(sig.ma60) ? ` ／ MA60 ${sig.ma60}` : ''}`,
     })
   }
@@ -131,7 +131,7 @@ export function dailyChips(sig, stock, marketOpen) {
   const fromHigh = sig.pct_from_52w_high
   if (isNum(fromHigh) && fromHigh >= -5) {
     chips.push({
-      key: 'high', icon: '🔝', text: fromHigh === 0 ? '創高' : `距高${fromHigh}%`, tone: 'good', keepText: false,
+      key: 'high', icon: '高', text: fromHigh === 0 ? '創高' : `距高${fromHigh}%`, tone: 'good', keepText: false,
       title: `52週收盤高點 ${sig.high_52w}`,
     })
   }

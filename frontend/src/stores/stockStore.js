@@ -1,24 +1,46 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { DEFAULT_MOBILE_DENSITY, MOBILE_DENSITY, DEFAULT_TABLET_DENSITY, TABLET_DENSITY } from '../constants'
 
 const DENSITY_KEY        = 'mobile_density'
 const TABLET_DENSITY_KEY = 'tablet_density'
+const MODE_KEY           = 'view_mode'
+const HEATMAP_MODE_KEY   = 'heatmap_mode'
+
+export const HEATMAP_MODES = ['volume', 'turnover', 'buy_score']
+const MODES = ['overview', ...HEATMAP_MODES, 'etf', 'watchlist']
+
+// Per-viewer convenience: storage can be blocked, so reads and writes never throw.
+function readStored(key, allowed, fallback) {
+  try {
+    const value = localStorage.getItem(key)
+    return allowed.includes(value) ? value : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function writeStored(key, value) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // storage unavailable — the choice still applies for this session
+  }
+}
 
 export const useStockStore = defineStore('stock', () => {
   // ── grid size (desktop) ──
-  const gridSize = ref(6)           // 6 | 5 | 4
+  const gridSize = ref(5)           // 6 | 5 | 4（預設 5×5）
 
   // ── mobile card density ──
-  const _storedDensity = (typeof localStorage !== 'undefined' && localStorage.getItem(DENSITY_KEY)) || ''
-  const mobileDensity = ref(_storedDensity in MOBILE_DENSITY ? _storedDensity : DEFAULT_MOBILE_DENSITY)
+  const mobileDensity = ref(readStored(DENSITY_KEY, Object.keys(MOBILE_DENSITY), DEFAULT_MOBILE_DENSITY))
 
   // ── tablet card density ──
-  const _storedTabletDensity = (typeof localStorage !== 'undefined' && localStorage.getItem(TABLET_DENSITY_KEY)) || ''
-  const tabletDensity = ref(_storedTabletDensity in TABLET_DENSITY ? _storedTabletDensity : DEFAULT_TABLET_DENSITY)
+  const tabletDensity = ref(readStored(TABLET_DENSITY_KEY, Object.keys(TABLET_DENSITY), DEFAULT_TABLET_DENSITY))
 
   // ── stock mode state ──
-  const mode = ref('turnover')      // 'volume' | 'turnover' | 'etf' | 'buy_score' | 'watchlist'
+  const mode = ref(readStored(MODE_KEY, MODES, 'overview'))
+  const heatmapMode = ref(readStored(HEATMAP_MODE_KEY, HEATMAP_MODES, 'turnover'))
   const sectors = ref([])
   const date = ref('')
   const marketOpen = ref(true)
@@ -52,18 +74,34 @@ export const useStockStore = defineStore('stock', () => {
   function setMobileDensity(d) {
     if (!(d in MOBILE_DENSITY)) return
     mobileDensity.value = d
-    if (typeof localStorage !== 'undefined') localStorage.setItem(DENSITY_KEY, d)
+    writeStored(DENSITY_KEY, d)
   }
 
   function setTabletDensity(d) {
     if (!(d in TABLET_DENSITY)) return
     tabletDensity.value = d
-    if (typeof localStorage !== 'undefined') localStorage.setItem(TABLET_DENSITY_KEY, d)
+    writeStored(TABLET_DENSITY_KEY, d)
   }
 
   function setMode(newMode) {
     mode.value = newMode
+    writeStored(MODE_KEY, newMode)
+    if (HEATMAP_MODES.includes(newMode)) {
+      heatmapMode.value = newMode
+      writeStored(HEATMAP_MODE_KEY, newMode)
+    }
   }
+
+  // The display pool: one flat list, shared by every view (CLAUDE.md rules 3/4).
+  const stockPool = computed(() => {
+    const flat = []
+    for (const sector of sectors.value) {
+      for (const stock of sector.stocks ?? []) {
+        flat.push({ ...stock, sector: sector.name })
+      }
+    }
+    return flat
+  })
 
   function setData(payload) {
     sectors.value = payload.sectors ?? []
@@ -150,7 +188,7 @@ export const useStockStore = defineStore('stock', () => {
     gridSize, setGridSize,
     mobileDensity, setMobileDensity,
     tabletDensity, setTabletDensity,
-    mode, sectors, date, marketOpen, updatedAt, loading, error,
+    mode, heatmapMode, sectors, stockPool, date, marketOpen, updatedAt, loading, error,
     setMode, setData, setLoading, setError,
     etfs, etfDate, etfUpdatedAt, etfLoading, etfError, etfSortBy,
     setEtfData, setEtfLoading, setEtfError, setEtfSortBy,

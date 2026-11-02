@@ -12,6 +12,7 @@ Contract:
                                  return current scores + {"fetching": true}
   - GET /api/scores/{stock_id} → criteria / risk detail from details/<newest>.json
                                  (404 when absent)
+  - GET /api/scores/{stock_id}/history → the stock across retained score files
 """
 
 import json
@@ -50,6 +51,10 @@ DETAILS_DIR = SCORES_DIR / "details"
 _cache: dict = {}
 # Detail cache: {"path": str, "mtime": float, "date": str, "payload": dict}
 _detail_cache: dict = {}
+# History cache: {path: (mtime, date, {stock_id: reduced summary})}
+_history_cache: dict = {}
+
+_HISTORY_FIELDS = ("score", "eligible_count", "pass_rate", "signal", "risk_score")
 
 
 def _load() -> dict:
@@ -115,6 +120,38 @@ def _load_details() -> tuple[str, dict]:
         except Exception as exc:
             logger.warning("Skipping corrupt score detail file %s: %s", f, exc)
     return "", {}
+
+
+def _load_history() -> list[tuple[str, dict]]:
+    """[(date, {stock_id: summary})] for every readable score file, oldest first.
+
+    Keeps only the fields the trend needs, so seven full files stay small in a
+    long-running process; files the crawler pruned drop out of the cache.
+    """
+    if not SCORES_DIR.exists():
+        return []
+    out = []
+    alive = set()
+    for f in sorted(SCORES_DIR.glob("*.json")):
+        key = str(f)
+        alive.add(key)
+        try:
+            mtime = f.stat().st_mtime
+            cached = _history_cache.get(key)
+            if cached is None or cached[0] != mtime:
+                raw = json.loads(f.read_text(encoding="utf-8"))
+                reduced = {
+                    stock_id: {field: entry.get(field) for field in _HISTORY_FIELDS}
+                    for stock_id, entry in raw.get("scores", {}).items()
+                }
+                cached = (mtime, raw.get("date") or f.stem, reduced)
+                _history_cache[key] = cached
+            out.append((cached[1], cached[2]))
+        except Exception as exc:
+            logger.warning("Skipping corrupt scores file %s: %s", f, exc)
+    for key in set(_history_cache) - alive:
+        _history_cache.pop(key, None)   # concurrent requests can prune the same key
+    return out
 
 
 def _flag_active(flag: Path) -> bool:
@@ -191,6 +228,17 @@ def get_scores(request: Request, force: bool = False):
     if progress is not None:
         body["progress"] = progress
     return JSONResponse(content=body)
+
+
+@router.get("/scores/{stock_id}/history")
+def get_score_history(stock_id: str):
+    """Return this stock's score per retained file; absent days are not filled in."""
+    points = [
+        {"date": day, **summaries[stock_id]}
+        for day, summaries in _load_history()
+        if stock_id in summaries
+    ]
+    return {"stock_id": stock_id, "points": points}
 
 
 @router.get("/scores/{stock_id}")
