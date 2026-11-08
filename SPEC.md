@@ -341,6 +341,39 @@ Query params: `horizon=5|20|60` (default `20` trading days).
   `{"date": "", "horizon": 20, "periods": 0, "baseline": null, "setups": []}`
 - supports `ETag` + `Cache-Control` (`SIGNALS_CACHE_TTL_SECONDS`)
 
+### `GET /api/market/alert-counts`
+
+Daily history of the buy-score run: the score distribution and how many scored
+stocks tripped each risk rule (`risk_criteria[].name`, e.g. `千張大戶退場`). Written
+by the crawler into `score_summary_daily` / `score_alert_daily` after every scoring
+run, so it outlives the 7 retained score files. Read by the macro dashboard (8501)
+as a market-level distribution signal.
+
+Query params: `days=5..400` (default `120`), counted in recorded dates.
+
+```json
+{
+  "date": "2026-11-06",
+  "summary": [
+    { "date": "2026-11-06", "scored": 598, "median": 41.7, "p10": 20.8, "p90": 66.7,
+      "bins": [3, 12, 40, 88, 130, 150, 101, 52, 18, 4], "partial": false }
+  ],
+  "alerts": [
+    { "name": "千張大戶退場", "counts": [31], "shares": [5.2] }
+  ]
+}
+```
+
+- `date` is the score file date (the 03:00 run the morning after the trading day)
+- distribution is over `pass_rate` (0–100) of stocks with `eligible_count > 0`;
+  `bins` are ten 10-point buckets, the last one including 100
+- `alerts[].counts[i]` / `shares[i]` align with `summary[i]`; `shares` = count ÷
+  `scored` × 100. A rule with no hits that day reports `0`, never a gap
+- `partial: true` when FinMind quota stopped the run; the resumed run overwrites the
+  row. The candidate pool changes daily, so compare `shares`, not raw counts
+- missing tables → `{"date": "", "summary": [], "alerts": []}`
+- supports `ETag` + `Cache-Control` (`SIGNALS_CACHE_TTL_SECONDS`)
+
 ### `GET /api/stocks/top100`
 
 Query params:
@@ -765,6 +798,7 @@ signal_backfill(stock_id PRIMARY KEY, bars_at)
 | `stock_signals` | latest trade date only (rebuilt each run) |
 | `buy_scores/*.json` | latest 7 files |
 | `buy_scores/details/*.json` | latest 7 files |
+| `score_summary_daily` / `score_alert_daily` | latest `SCORE_SUMMARY_KEEP_DAYS` dates, default `800` |
 
 ## Environment variables
 

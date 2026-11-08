@@ -13,6 +13,12 @@
       <LineChart :dates="dates" :series="indexSeries" :height="100" area :format="formatIndex" title="等權指數" />
     </template>
 
+    <template v-if="historyDates.length >= 2">
+      <h3 class="sub-title">評分中位數與「千張大戶退場」占比（每日評分紀錄）</h3>
+      <LineChart :dates="historyDates" :series="historySeries" :height="120" :format="formatPercent" title="評分與警示走勢" />
+      <p class="panel__hint">占比 = 觸發家數 ÷ 當日評分檔數；評分池每日變動，看占比不看家數。</p>
+    </template>
+
     <template v-if="scored">
       <h3 class="sub-title">評分分布 <span class="num">（{{ scored }} 檔）</span></h3>
       <div class="sig-bar" role="img" :aria-label="signalAria">
@@ -62,6 +68,18 @@ const breadthSeries = computed(() => [
 const indexSeries = computed(() => [
   { key: 'index', label: '等權指數', color: 'var(--series-1)', values: points.value.map(p => p.ew_index) },
 ])
+
+const WHALE_EXIT = '千張大戶退場'
+const history = computed(() => market.alertCounts?.summary ?? [])
+const historyDates = computed(() => history.value.map(p => p.date))
+const historySeries = computed(() => {
+  const whale = (market.alertCounts?.alerts ?? []).find(a => a.name === WHALE_EXIT)
+  return [
+    { key: 'median', label: '評分中位數', color: 'var(--series-1)', values: history.value.map(p => p.median) },
+    { key: 'whale', label: '大戶退場占比', color: 'var(--series-2)',
+      values: whale ? whale.shares : history.value.map(() => 0) },
+  ]
+})
 
 const scored = computed(() => props.summary.scored)
 const signalRows = computed(() => SIGNAL_LABELS

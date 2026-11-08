@@ -55,6 +55,7 @@ function refresh() {
   if (document.hidden) return
   market.loadTrend()
   market.loadBacktest()
+  market.loadAlertCounts()
 }
 
 let timer = null

@@ -1,5 +1,5 @@
 /**
- * marketStore.js — /api/market/trend and /api/market/backtest.
+ * marketStore.js — /api/market/trend, /api/market/backtest and /api/market/alert-counts.
  *
  * Both change once per trading day, so failures keep the last good payload and
  * `loaded` lets the view tell "not computed yet" from "still loading".
@@ -22,6 +22,7 @@ export const useMarketStore = defineStore('market', () => {
   const backtest = ref(null)
   const backtestFailed = ref(false)
   const horizon = ref(20)
+  const alertCounts = ref(null)
 
   async function loadTrend() {
     try {
@@ -46,5 +47,16 @@ export const useMarketStore = defineStore('market', () => {
     }
   }
 
-  return { trend, trendLoaded, backtest, backtestFailed, horizon, loadTrend, loadBacktest }
+  async function loadAlertCounts() {
+    try {
+      alertCounts.value = await getJson('/api/market/alert-counts?days=120')
+    } catch (err) {
+      console.warn('[marketStore] alert counts unavailable:', err.message)
+    }
+  }
+
+  return {
+    trend, trendLoaded, backtest, backtestFailed, horizon, alertCounts,
+    loadTrend, loadBacktest, loadAlertCounts,
+  }
 })

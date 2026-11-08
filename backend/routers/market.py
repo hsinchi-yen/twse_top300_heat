@@ -4,8 +4,10 @@ market.py — read-only analytics over the crawler's daily_bars / inst_flows.
   GET /api/stocks/{stock_id}/history   price + MA + institutional history
   GET /api/market/trend                breadth + sector rotation
   GET /api/market/backtest             technical setup validation
+  GET /api/market/alert-counts         buy-score distribution + risk-rule hit history
 
-These tables are created and owned by crawler/signals.py; a missing table means
+These tables are created and owned by crawler/signals.py (and
+crawler/score_summary.py for alert-counts); a missing table means
 "not computed yet", so every route degrades to its empty state. Market results
 change once per trading day, so they are memoized until the bars change — cheap
 enough for the embedded host, where the full scan would otherwise run per request.
@@ -177,3 +179,37 @@ def market_backtest(
     return _json(request, payload or {
         "date": "", "horizon": horizon, "periods": 0, "baseline": None, "setups": [],
     })
+
+
+@router.get("/market/alert-counts")
+def market_alert_counts(
+    request: Request,
+    days: int = Query(default=120, ge=5, le=400),
+    db: Session = Depends(get_db),
+):
+    """Buy-score distribution and risk-rule hit counts per scoring date (crawler-owned).
+
+    Small tables read directly: at most 400 rows plus their alert counts.
+    """
+    summary_rows = _rows(db, """
+        SELECT date, scored, median, p10, p90, bins, partial FROM score_summary_daily
+        ORDER BY date DESC LIMIT :days""", days=days)
+    if not summary_rows:
+        return _json(request, {"date": "", "summary": [], "alerts": []})
+    summary_rows = list(reversed(summary_rows))
+    dates = [r[0] for r in summary_rows]
+    scored = {r[0]: r[1] for r in summary_rows}
+    summary = [{"date": r[0], "scored": r[1], "median": r[2], "p10": r[3], "p90": r[4],
+                "bins": json.loads(r[5]), "partial": bool(r[6])} for r in summary_rows]
+
+    hits: dict[str, dict[str, int]] = {}
+    for day, name, count in _rows(
+        db, "SELECT date, name, count FROM score_alert_daily WHERE date >= :start", start=dates[0]
+    ):
+        hits.setdefault(name, {})[day] = count
+    alerts = []
+    for name in sorted(hits):
+        counts = [hits[name].get(d, 0) for d in dates]   # no hits that day = 0, not a gap
+        shares = [round(c / scored[d] * 100, 1) if scored[d] else None for c, d in zip(counts, dates)]
+        alerts.append({"name": name, "counts": counts, "shares": shares})
+    return _json(request, {"date": dates[-1], "summary": summary, "alerts": alerts})

@@ -25,6 +25,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 
+import score_summary
 import signals
 from sources.twse import fetch_twse_daily
 from sources.tpex import fetch_tpex_daily
@@ -340,6 +341,7 @@ def _resume_score_job_locked(pending_ids: list[str], run_date: str) -> None:
         merged_scores = {**existing_scores, **new_scores}
         write_scores(merged_scores, run_date)
         logger.info("_resume_score_job done: %d stocks in final result for %s", len(merged_scores), run_date)
+        _record_summary(run_date, merged_scores)
     except QuotaExhaustedMidBatch as exc:
         logger.warning(
             "_resume_score_job: quota hit again — %d stocks still pending, will retry in %.0fs",
@@ -470,6 +472,8 @@ def _score_job(force: bool = False) -> None:
         merged_scores = {**_partial_baseline, **new_scores}
         write_scores(merged_scores, today)
         logger.info("score_job done: %d/%d stocks scored", len(merged_scores), len(all_stock_ids))
+        # The baseline can be yesterday's file; summarise today's candidates only.
+        _record_summary(today, {sid: merged_scores[sid] for sid in all_stock_ids if sid in merged_scores})
     except QuotaExhaustedMidBatch as exc:
         logger.warning(
             "score_job: quota exhausted — %d/%d stocks remain unscored. "
@@ -477,8 +481,20 @@ def _score_job(force: bool = False) -> None:
             len(exc.remaining_ids), len(all_stock_ids), QUOTA_WAIT_S,
         )
         _write_resume_state(exc.remaining_ids, today)
+        # Only today's own scores: the partial-write baseline may be yesterday's file.
+        _record_summary(today, {**existing_scores, **exc.scored}, partial=True)
     finally:
         _clear_scoring_flags()
+
+
+def _record_summary(run_date: str, scores: dict, *, partial: bool = False) -> None:
+    """Market-level score history for /api/market/alert-counts; never fails scoring."""
+    try:
+        with Session() as session:
+            score_summary.record(session, run_date, scores, partial=partial,
+                                 generated_at=datetime.now(tz=TZ_TAIPEI).isoformat())
+    except Exception as exc:
+        logger.error("score_summary record failed for %s: %s", run_date, exc)
 
 
 def _mark_scoring_in_progress() -> None:
