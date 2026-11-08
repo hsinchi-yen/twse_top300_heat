@@ -54,6 +54,20 @@ class TestSummarize:
         assert score_summary.summarize({"a": entry(0.0, eligible=0)}) is None
 
 
+    def test_reads_risk_flags_of_summary_entries(self):
+        # The shape fetch_buy_score returns and the dated JSON stores (production 2026-11-08).
+        stored = {"pass_rate": 62.5, "eligible_count": 24, "risk_score": 2,
+                  "risk_flags": [{"category": "籌碼排雷", "name": "千張大戶退場"},
+                                 {"category": "估值排雷", "name": "本益比過高"}]}
+        s = score_summary.summarize({"2330": stored, "2317": entry(50.0)})
+        assert s["alerts"] == {"千張大戶退場": 1, "本益比過高": 1}
+
+    def test_same_rule_in_both_shapes_counts_once(self):
+        both = {**entry(50.0, risks=["千張大戶退場"]),
+                "risk_flags": [{"category": "籌碼排雷", "name": "千張大戶退場"}]}
+        assert score_summary.summarize({"a": both})["alerts"] == {"千張大戶退場": 1}
+
+
 class TestRecord:
     def test_upsert_replaces_partial_row(self, session):
         assert score_summary.record(session, "2026-11-06", {"a": entry(40.0, risks=["千張大戶退場"])}, partial=True)

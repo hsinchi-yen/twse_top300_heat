@@ -46,6 +46,21 @@ def _quantile(sorted_values: list[float], q: float) -> float:
     return sorted_values[lo] + (sorted_values[hi] - sorted_values[lo]) * (pos - lo)
 
 
+def _risk_names(entry: dict) -> set[str]:
+    """Risk-rule names of one entry, whichever shape it arrives in.
+
+    Summary entries (what score_job merges and the dated JSON keeps) carry
+    ``risk_flags: [{category, name}]``; ``risk_criteria`` exists only in the
+    detail file or a raw engine result.
+    """
+    names = set()
+    for key in ("risk_flags", "risk_criteria"):
+        for risk in entry.get(key) or []:
+            if isinstance(risk, dict) and risk.get("name"):
+                names.add(risk["name"])
+    return names
+
+
 def summarize(scores: dict[str, dict]) -> dict | None:
     """Distribution of pass_rate and risk-rule hit counts; None when nothing is scored.
 
@@ -59,10 +74,8 @@ def summarize(scores: dict[str, dict]) -> dict | None:
         if rate is None:
             continue
         rates.append(float(rate))
-        for risk in entry.get("risk_criteria") or []:
-            name = risk.get("name") if isinstance(risk, dict) else None
-            if name:
-                alerts[name] += 1
+        for name in _risk_names(entry):
+            alerts[name] += 1
     if not rates:
         return None
     rates.sort()
